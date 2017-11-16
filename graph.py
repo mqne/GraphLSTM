@@ -3,10 +3,17 @@ import networkx as nx
 # for Graph visualisation
 import matplotlib.pyplot as plt
 
+
 def plot_graph(g):
     plt.subplot()
     nx.draw(g, with_labels=True)
     plt.show()
+
+
+# GraphLSTM graph node structure:
+# (1, {'cell': <object GraphLSTMCell>, 'confidence' = 1.0, 'name' = 't0'})
+
+
 
 # the hand graph as shown in the kickoff slides
 kickoff_hand = [("t0", "wrist"), ("i0", "wrist"), ("m0", "wrist"), ("r0", "wrist"), ("p0", "wrist"), ("i0", "m0"),
@@ -18,8 +25,17 @@ kickoff_hand = [("t0", "wrist"), ("i0", "wrist"), ("m0", "wrist"), ("r0", "wrist
 G = nx.Graph(kickoff_hand)
 print "Neighbours of i0:"
 for x in nx.all_neighbors(G, "i0"): print x
-#plot_graph(G)
-print "\nAll nodes in Graph:"
-for i in G: print i
+# plot_graph(G)
+# print "\nAll nodes in Graph:"
+# for i in G: print i
 
-print sum(len(c) for c in G)
+# print sum(len(c) for c in G)
+
+G.node['t0']['name'] = 't0name'
+i = 0
+for n in G.nodes:
+    G.node[n]["confidence"] = -i/2.
+    G.node[n]["name"] = n + "name"
+    i += 1
+for node, params in sorted(G.nodes(data=True), key=lambda x: x[1]['confidence']):
+    print G.node[node]

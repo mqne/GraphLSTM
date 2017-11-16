@@ -470,7 +470,7 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
 
         self._neighbours = neighbours
         # TODO: GraphLSTMCell array the right choice for neighbours? Or rather indexing by names (i0 etc.)?
-        self._visited = False   # TODO: potentially obsolete parameter?
+        self._visited = False  # TODO: potentially obsolete parameter?
 
     @property
     def num_neighbours(self):
@@ -548,7 +548,6 @@ import networkx as nx
 
 
 class GraphLSTMNet(RNNCell):
-
     """GraphLSTM Network composed of multiple simple cells.
 
     The implementation is an adaption of tensorflow's MultiRNNCell
@@ -609,13 +608,20 @@ class GraphLSTMNet(RNNCell):
                 # presumably does not contain TensorArrays or anything else fancy
                 return super(GraphLSTMNet, self).zero_state(batch_size, dtype)
 
-    def call(self, inputs, state): # TODO: adapt for Graph LSTM
+    def call(self, inputs, state):  # TODO: adapt for Graph LSTM
         """Run this multi-layer cell on inputs, starting from state."""
+        # TODO: next 3 variables obsolete?
         cur_state_pos = 0
         cur_inp = inputs
         new_states = []
-        for i, cell in enumerate(self._cells):
-            with vs.variable_scope("cell_%d" % i):
+
+        # iterate over cells in graph, starting with highest 'confidence' value
+        for i in sorted(self._graph.nodes(data=True), key=lambda x: x[1]['confidence'], reverse=True):
+            with vs.variable_scope("cell_%d" % i):  # TODO: variable scope
+                # extract GraphLSTMCell object from graph node
+                cell = self._graph.node[i]['cell']
+                # TODO: make overall state vector indexable, e.g. by assigning each node a fixed index
+                # at construction time and using this to address state vector slices (check this!)
                 if self._state_is_tuple:
                     if not nest.is_sequence(state):
                         raise ValueError(
@@ -626,6 +632,8 @@ class GraphLSTMNet(RNNCell):
                     cur_state = array_ops.slice(state, [0, cur_state_pos],
                                                 [-1, cell.state_size])
                     cur_state_pos += cell.state_size
+                # TODO: calculate averaged hidden states for neighbouring nodes h^__{i,t} here,
+                # then pass to cell (in implicit call)
                 cur_inp, new_state = cell(cur_inp, cur_state)
                 new_states.append(new_state)
 
