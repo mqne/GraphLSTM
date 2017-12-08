@@ -23,6 +23,13 @@ kickoff_hand = [("t0", "wrist"), ("i0", "wrist"), ("m0", "wrist"), ("r0", "wrist
 
 # create the hand graph from given edge list
 G = nx.Graph(kickoff_hand)
+# add index to each node, corresponding to index in list of alphabetically sorted node names
+for i, node in enumerate(sorted(G.nodes)):
+    print i, node
+    G.node[node]["index"] = i
+
+
+
 print "Neighbours of i0:"
 for x in nx.all_neighbors(G, "i0"): print x
 # plot_graph(G)
@@ -38,4 +45,7 @@ for n in G.nodes:
     G.node[n]["name"] = n + "name"
     i += 1
 for node, params in sorted(G.nodes(data=True), key=lambda x: x[1]['confidence']):
-    print G.node[node]
+    print "G.node[node]: " + str(G.node[node])
+    print "node: " + str(node)
+    print "params: " + str(params)
+    print "params['name']: " + str(params['name'])

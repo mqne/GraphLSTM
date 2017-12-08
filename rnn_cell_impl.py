@@ -610,18 +610,20 @@ class GraphLSTMNet(RNNCell):
 
     def call(self, inputs, state):  # TODO: adapt for Graph LSTM
         """Run this multi-layer cell on inputs, starting from state."""
-        # TODO: next 3 variables obsolete?
-        cur_state_pos = 0
+        # TODO: next 2 variables obsolete?
         cur_inp = inputs
         new_states = []
 
         # iterate over cells in graph, starting with highest 'confidence' value
-        for i in sorted(self._graph.nodes(data=True), key=lambda x: x[1]['confidence'], reverse=True):
-            with vs.variable_scope("cell_%d" % i):  # TODO: variable scope
+        for node_name, node_obj in sorted(self._graph.nodes(data=True), key=lambda x: x[1]['confidence'], reverse=True):
+            with vs.variable_scope("cell_%s" % node_name):  # TODO: variable scope in other places
                 # extract GraphLSTMCell object from graph node
-                cell = self._graph.node[i]['cell']
-                # TODO: make overall state vector indexable, e.g. by assigning each node a fixed index
-                # at construction time and using this to address state vector slices (check this!)
+                cell = node_obj['cell']
+                # extract node index for state vector addressing
+                i = node_obj['index']
+                # TODO: craft state vector (where?)
+                # (state vector: all cell states, and each cell at the right place as determined by 'index')
+                # TODO: check if state vector is addressed correctly here
                 if self._state_is_tuple:
                     if not nest.is_sequence(state):
                         raise ValueError(
@@ -629,11 +631,18 @@ class GraphLSTMNet(RNNCell):
                             (len(self.state_size), state))
                     cur_state = state[i]
                 else:
+                    cur_state_pos = cell.state_size * i
                     cur_state = array_ops.slice(state, [0, cur_state_pos],
                                                 [-1, cell.state_size])
-                    cur_state_pos += cell.state_size
+
                 # TODO: calculate averaged hidden states for neighbouring nodes h^__{i,t} here,
-                # then pass to cell (in implicit call)
+                # iterate over cell neighbours
+                # TODO: create empty TensorFlow vector of state vectors
+                for neighbour_name, neighbour_obj in nx.all_neighbors(self._graph, node_name):
+                    neighbour_cell = neighbour_obj['cell']
+                    # TODO: attach each hidden state to vector of state vectors
+                # TODO: tf.reduce_mean(stacked_hidden_states, axis_of_vector_stacking)
+                # TODO: pass averaged hidden neighbour states to cell (in implicit call)
                 cur_inp, new_state = cell(cur_inp, cur_state)
                 new_states.append(new_state)
 
