@@ -437,12 +437,11 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
     > that follows.
     """
 
-    def __init__(self, num_units, neighbours=[], forget_bias=1.0,
+    def __init__(self, num_units, forget_bias=1.0,
                  state_is_tuple=True, activation=None, reuse=None):
         """Initialize the Graph LSTM cell.
 
         Args:
-          neighbours: GraphLSTMCell list, Holds neighbouring nodes.
           num_units: int, The number of units in the Graph LSTM cell.
           forget_bias: float, The bias added to forget gates (see above).
             Must set to `0.0` manually when restoring from CudnnLSTM-trained
@@ -468,21 +467,7 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
         self._state_is_tuple = state_is_tuple
         self._activation = activation or math_ops.tanh
 
-        self._neighbours = neighbours
-        # TODO: GraphLSTMCell array the right choice for neighbours? Or rather indexing by names (i0 etc.)?
         self._visited = False  # TODO: potentially obsolete parameter?
-
-    @property
-    def num_neighbours(self):
-        return len(self._neighbours)
-
-    @property
-    def neighbours(self):
-        return self._neighbours
-
-    @neighbours.setter
-    def neighbours(self, cells):
-        self._neighbours = cells
 
     @property
     def visited(self):
@@ -497,16 +482,7 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
     def output_size(self):
         return self._num_units
 
-    @property
-    def hidden_state(self):
-        if self._state_is_tuple:
-            c, h = state
-        else:
-            c, h = array_ops.split(value=state, num_or_size_splits=2, axis=1)
-        return h
-        # TODO
-
-    def call(self, inputs, state):
+    def call(self, inputs, state, neighbour_states):
         """Graph long short-term memory cell (GraphLSTM).
 
         Args:
@@ -515,6 +491,7 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
             `[batch_size x self.state_size]`, if `state_is_tuple` has been set to
             `True`.  Otherwise, a `Tensor` shaped
             `[batch_size x 2 * self.state_size]`.
+          neighbour_states: a X of the neighbouring nodes' hidden states TODO
 
         Returns:
           A pair containing the new hidden state, and the new state (either a
@@ -559,6 +536,21 @@ class GraphLSTMNet(RNNCell):
 
     The implementation is work in progress."""
 
+    def _cell(self, node, graph=None):
+        """Return the GraphLSTMCell belonging to a node.
+
+        Args:
+          node: The node whose GraphLSTMCell object will be returned.
+          graph: The graph from which the node will be extracted. Defaults to self._graph .
+        """
+        if graph is None:
+            graph = self._graph
+        elif not isinstance(graph, nx.classes.graph.Graph):
+            raise TypeError(
+                "graph must be a Graph of package networkx, but saw: %s." % graph)
+
+        return graph.node[node]["cell"]
+
     def __init__(self, graph, state_is_tuple=True):
         """Create a Graph LSTM Network composed of a graph of GraphLSTMCells.
 
@@ -581,28 +573,29 @@ class GraphLSTMNet(RNNCell):
                 "graph must be a Graph of package networkx, but saw: %s." % graph)
 
         self._graph = graph
+        # self._cells = nx.get_node_attributes(self._graph, "cell")
         self._state_is_tuple = state_is_tuple
         if not state_is_tuple:
-            if any(nest.is_sequence(c.state_size) for c in self._graph):
+            if any(nest.is_sequence(self._cell(n).state_size) for n in self._graph):
                 raise ValueError("Some cells return tuples of states, but the flag "
                                  "state_is_tuple is not set.  State sizes are: %s"
-                                 % str([c.state_size for c in self._graph]))
+                                 % str([self._cell(n).state_size for n in self._graph]))
 
     @property
     def state_size(self):
         if self._state_is_tuple:
-            return tuple(cell.state_size for cell in self._graph)
+            return tuple(self._cell(n).state_size for n in self._graph)
         else:
-            return sum([cell.state_size for cell in self._graph])
+            return sum([self._cell(n).state_size for n in self._graph])
 
     @property
     def output_size(self):
-        return sum(c.output_size for c in self._graph)
+        return sum(self._cell(n).output_size for n in self._graph)
 
     def zero_state(self, batch_size, dtype):
         with ops.name_scope(type(self).__name__ + "ZeroState", values=[batch_size]):
             if self._state_is_tuple:
-                return tuple(cell.zero_state(batch_size, dtype) for cell in self._graph)
+                return tuple(self._cell(n).zero_state(batch_size, dtype) for n in self._graph)
             else:
                 # We know here that state_size of each cell is not a tuple and
                 # presumably does not contain TensorArrays or anything else fancy
