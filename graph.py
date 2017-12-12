@@ -62,3 +62,4 @@ def confidence(name):
 
 
 for n in G: print confidence(n)
+print G.number_of_nodes()

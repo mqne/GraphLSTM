@@ -91,7 +91,7 @@ def _concat(prefix, suffix, static=False):
         p = tensor_shape.as_shape(prefix)
         p_static = p.as_list() if p.ndims is not None else None
         p = (constant_op.constant(p.as_list(), dtype=dtypes.int32)
-             if p.is_fully_defined() else None)
+        if p.is_fully_defined() else None)
     if isinstance(suffix, ops.Tensor):
         s = suffix
         s_static = tensor_util.constant_value(suffix)
@@ -104,7 +104,7 @@ def _concat(prefix, suffix, static=False):
         s = tensor_shape.as_shape(suffix)
         s_static = s.as_list() if s.ndims is not None else None
         s = (constant_op.constant(s.as_list(), dtype=dtypes.int32)
-             if s.is_fully_defined() else None)
+        if s.is_fully_defined() else None)
 
     if static:
         shape = tensor_shape.as_shape(p_static).concatenate(s_static)
@@ -371,7 +371,7 @@ class BasicLSTMCell(RNNCell):
     @property
     def state_size(self):
         return (LSTMStateTuple(self._num_units, self._num_units)
-                if self._state_is_tuple else 2 * self._num_units)
+        if self._state_is_tuple else 2 * self._num_units)
 
     @property
     def output_size(self):
@@ -405,7 +405,7 @@ class BasicLSTMCell(RNNCell):
         i, j, f, o = array_ops.split(value=concat, num_or_size_splits=4, axis=1)
 
         new_c = (
-            c * sigmoid(f + self._forget_bias) + sigmoid(i) * self._activation(j))
+                c * sigmoid(f + self._forget_bias) + sigmoid(i) * self._activation(j))
         new_h = self._activation(new_c) * sigmoid(o)
 
         if self._state_is_tuple:
@@ -505,13 +505,16 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
         else:
             c, h = array_ops.split(value=state, num_or_size_splits=2, axis=1)
 
+        # TODO: calculate averaged hidden states for neighbouring nodes h^__{i,t} here,
+        # TODO: tf.reduce_mean(stacked_hidden_states, axis_of_vector_stacking)
+
         concat = _linear([inputs, h], 4 * self._num_units, True)
 
         # i = input_gate, j = new_input, f = forget_gate, o = output_gate
         i, j, f, o = array_ops.split(value=concat, num_or_size_splits=4, axis=1)
 
         new_c = (
-            c * sigmoid(f + self._forget_bias) + sigmoid(i) * self._activation(j))
+                c * sigmoid(f + self._forget_bias) + sigmoid(i) * self._activation(j))
         new_h = self._activation(new_c) * sigmoid(o)
 
         if self._state_is_tuple:
@@ -522,6 +525,9 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
 
 
 import networkx as nx
+
+CELL = "cell"
+INDEX = "index"
 
 
 class GraphLSTMNet(RNNCell):
@@ -549,7 +555,7 @@ class GraphLSTMNet(RNNCell):
             raise TypeError(
                 "graph must be a Graph of package networkx, but saw: %s." % graph)
 
-        return graph.node[node]["cell"]
+        return graph.node[node][CELL]
 
     def __init__(self, graph, state_is_tuple=True):
         """Create a Graph LSTM Network composed of a graph of GraphLSTMCells.
@@ -573,7 +579,6 @@ class GraphLSTMNet(RNNCell):
                 "graph must be a Graph of package networkx, but saw: %s." % graph)
 
         self._graph = graph
-        # self._cells = nx.get_node_attributes(self._graph, "cell")
         self._state_is_tuple = state_is_tuple
         if not state_is_tuple:
             if any(nest.is_sequence(self._cell(n).state_size) for n in self._graph):
@@ -602,21 +607,29 @@ class GraphLSTMNet(RNNCell):
                 return super(GraphLSTMNet, self).zero_state(batch_size, dtype)
 
     def call(self, inputs, state):  # TODO: adapt for Graph LSTM
-        """Run this multi-layer cell on inputs, starting from state."""
-        # TODO: next 2 variables obsolete?
-        cur_inp = inputs
-        new_states = []
+        """Run this multi-layer cell on inputs, starting from state.
+
+        Args:
+          inputs: a tuple of inputs for each graph node, where the index must correspond to the node attribute 'index'
+          state: a tuple or tensor of states for each node
+        """
+
+        # check if input size matches expected size
+        if len(inputs) is not self._graph.number_of_nodes():
+            raise ValueError("Number of nodes in GraphLSTMNet input %d does not match number of graph nodes %d" %
+                             (len(inputs), self._graph.number_of_nodes()))
+
+        new_states = [None] * self._graph.number_of_nodes()
+        graph_output = [None] * self._graph.number_of_nodes()
 
         # iterate over cells in graph, starting with highest 'confidence' value
         for node_name, node_obj in sorted(self._graph.nodes(data=True), key=lambda x: x[1]['confidence'], reverse=True):
             with vs.variable_scope("cell_%s" % node_name):  # TODO: variable scope in other places
                 # extract GraphLSTMCell object from graph node
-                cell = node_obj['cell']
+                cell = node_obj[CELL]
                 # extract node index for state vector addressing
-                i = node_obj['index']
-                # TODO: craft state vector (where?)
-                # (state vector: all cell states, and each cell at the right place as determined by 'index')
-                # TODO: check if state vector is addressed correctly here
+                i = node_obj[INDEX]
+                # extract state of current cell
                 if self._state_is_tuple:
                     if not nest.is_sequence(state):
                         raise ValueError(
@@ -628,21 +641,33 @@ class GraphLSTMNet(RNNCell):
                     cur_state = array_ops.slice(state, [0, cur_state_pos],
                                                 [-1, cell.state_size])
 
-                # TODO: calculate averaged hidden states for neighbouring nodes h^__{i,t} here,
-                # iterate over cell neighbours
-                # TODO: create empty TensorFlow vector of state vectors
+                # extract and collect states of neighbouring cells
+                neighbour_states = []
                 for neighbour_name, neighbour_obj in nx.all_neighbors(self._graph, node_name):
-                    neighbour_cell = neighbour_obj['cell']
-                    # TODO: attach each hidden state to vector of state vectors
-                # TODO: tf.reduce_mean(stacked_hidden_states, axis_of_vector_stacking)
-                # TODO: pass averaged hidden neighbour states to cell (in implicit call)
-                cur_inp, new_state = cell(cur_inp, cur_state)
-                new_states.append(new_state)
+                    n_i = neighbour_obj[INDEX]
+                    if self._state_is_tuple:
+                        n_state = state[n_i]
+                    else:
+                        n_state_pos = cell.state_size * n_i
+                        n_state = array_ops.slice(state, [0, n_state_pos],
+                                                  [-1, cell.state_size])
+                    neighbour_states.append(n_state)
 
+                # TODO neighbour_states best packed into a TF tensor?
+                # extract input of current cell from input tuple
+                cur_inp = inputs[i]
+                # run current cell
+                cur_output, new_state = cell(cur_inp, cur_state, neighbour_states)
+                # store cell output and state in graph vector
+                graph_output[i] = cur_output
+                new_states[i] = new_state
+
+        # pack results and return
+        graph_output = tuple(graph_output)
         new_states = (tuple(new_states) if self._state_is_tuple else
                       array_ops.concat(new_states, 1))
 
-        return cur_inp, new_states
+        return graph_output, new_states
 
 
 class LSTMCell(RNNCell):
@@ -837,7 +862,7 @@ class LSTMCell(RNNCell):
                     # pylint: enable=invalid-unary-operand-type
 
         new_state = (LSTMStateTuple(c, m) if self._state_is_tuple else
-                     array_ops.concat([c, m], 1))
+        array_ops.concat([c, m], 1))
         return m, new_state
 
 
@@ -938,7 +963,7 @@ class DropoutWrapper(RNNCell):
                 return random_ops.random_uniform(shape, seed=inner_seed, dtype=dtype)
 
             if (not isinstance(self._input_keep_prob, numbers.Real) or
-                        self._input_keep_prob < 1.0):
+                    self._input_keep_prob < 1.0):
                 if input_size is None:
                     raise ValueError(
                         "When variational_recurrent=True and input_keep_prob < 1.0 or "
@@ -1178,7 +1203,7 @@ class MultiRNNCell(RNNCell):
                 new_states.append(new_state)
 
         new_states = (tuple(new_states) if self._state_is_tuple else
-                      array_ops.concat(new_states, 1))
+        array_ops.concat(new_states, 1))
 
         return cur_inp, new_states
 
