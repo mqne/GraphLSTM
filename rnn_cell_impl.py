@@ -508,6 +508,8 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
         # TODO: calculate averaged hidden states for neighbouring nodes h^__{i,t} here,
         # TODO: tf.reduce_mean(stacked_hidden_states, axis_of_vector_stacking)
 
+        # IMPLEMENTATION DIFFERS FROM PAPER: in eq. (2) g^f_ij uses h_j,t regardless of if node j has been updated
+        # already or not. Implemented here is h_j,t for non-updated nodes and h_j,t+1 for updated nodes
         concat = _linear([inputs, h], 4 * self._num_units, True)
 
         # i = input_gate, j = new_input, f = forget_gate, o = output_gate
