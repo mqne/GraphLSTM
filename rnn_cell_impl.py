@@ -491,7 +491,7 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
             `[batch_size x self.state_size]`, if `state_is_tuple` has been set to
             `True`.  Otherwise, a `Tensor` shaped
             `[batch_size x 2 * self.state_size]`.
-          neighbour_states: a X of the neighbouring nodes' hidden states TODO
+          neighbour_states: a list of the neighbouring nodes' states
 
         Returns:
           A pair containing the new hidden state, and the new state (either a
@@ -499,30 +499,56 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
             `state_is_tuple`).
         """
         sigmoid = math_ops.sigmoid
+        tanh = math_ops.tanh
+
         # Parameters of gates are concatenated into one multiply for efficiency.
         if self._state_is_tuple:
-            c, h = state
+            m, h = state
         else:
-            c, h = array_ops.split(value=state, num_or_size_splits=2, axis=1)
+            m, h = array_ops.split(value=state, num_or_size_splits=2, axis=1)
 
-        # TODO: calculate averaged hidden states for neighbouring nodes h^__{i,t} here,
-        # TODO: tf.reduce_mean(stacked_hidden_states, axis_of_vector_stacking)
+        # TODO: understand variable_scope for cell-local and graph-global variables ...
+
+        # ... TODO: "shared weight metrics Ufn for all nodes are learned to guarantee the spatial transformation
+        # invariance and enable the learning with various neighbors": GraphLSTM cells have to be generalized to be able
+        # to be applied to any random image superpixel region, whereas for hand pose estimation, we want each cell to
+        # specialize on its joint
+
+        # TODO: in the paper, all cells are generalized and thus do not need to know about the nature of their
+        # neighbours. However, we want cells specifically trained for certain joint, so information about which
+        # neighbouring cell belongs to which node might be interesting ... kind of a "hard wired" Graph LSTM
+        # But: that's good! -> Own contribution, learn generic hand model / even learn individual hand sizes?
+        # TODO: first implement regular Graph LSTM, then hand-specific version?
+
+        # TODO: unit tests
 
         # IMPLEMENTATION DIFFERS FROM PAPER: in eq. (2) g^f_ij uses h_j,t regardless of if node j has been updated
         # already or not. Implemented here is h_j,t for non-updated nodes and h_j,t+1 for updated nodes
+
+        # wrap neighbour_states into tensor
+        neighbour_states_tensor = array_ops.stack(neighbour_states)
+
+        # flip dimensions 0 and 1 to have two vectors of n hs and n js instead of n vectors of (h,j) tuples
+        m_j, h_j = array_ops.unstack(neighbour_states_tensor, axis=1)
+
+        # averaged hidden states for neighbouring nodes h^-_{i,yt}
+        h_j_avg = math_ops.reduce_mean(h_j, axis=0)
+
+        # here begin foreign codes
+
         concat = _linear([inputs, h], 4 * self._num_units, True)
 
         # i = input_gate, j = new_input, f = forget_gate, o = output_gate
         i, j, f, o = array_ops.split(value=concat, num_or_size_splits=4, axis=1)
 
-        new_c = (
-                c * sigmoid(f + self._forget_bias) + sigmoid(i) * self._activation(j))
-        new_h = self._activation(new_c) * sigmoid(o)
+        new_m = (
+                m * sigmoid(f + self._forget_bias) + sigmoid(i) * self._activation(j))
+        new_h = self._activation(new_m) * sigmoid(o)
 
         if self._state_is_tuple:
-            new_state = LSTMStateTuple(new_c, new_h)
+            new_state = LSTMStateTuple(new_m, new_h)
         else:
-            new_state = array_ops.concat([new_c, new_h], 1)
+            new_state = array_ops.concat([new_m, new_h], 1)
         return new_h, new_state
 
 
@@ -644,7 +670,7 @@ class GraphLSTMNet(RNNCell):
                                                 [-1, cell.state_size])
 
                 # extract and collect states of neighbouring cells
-                neighbour_states = []
+                neighbour_states_array = []
                 for neighbour_name, neighbour_obj in nx.all_neighbors(self._graph, node_name):
                     n_i = neighbour_obj[INDEX]
                     if self._state_is_tuple:
@@ -653,9 +679,9 @@ class GraphLSTMNet(RNNCell):
                         n_state_pos = cell.state_size * n_i
                         n_state = array_ops.slice(state, [0, n_state_pos],
                                                   [-1, cell.state_size])
-                    neighbour_states.append(n_state)
-
-                # TODO neighbour_states best packed into a TF tensor?
+                    neighbour_states_array.append(n_state)
+                # make immutable
+                neighbour_states = tuple(neighbour_states_array)
                 # extract input of current cell from input tuple
                 cur_inp = inputs[i]
                 # run current cell
