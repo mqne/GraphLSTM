@@ -518,17 +518,18 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
         # neighbours. However, we want cells specifically trained for certain joint, so information about which
         # neighbouring cell belongs to which node might be interesting ... kind of a "hard wired" Graph LSTM
         # But: that's good! -> Own contribution, learn generic hand model / even learn individual hand sizes?
-        # TODO: first implement regular Graph LSTM, then hand-specific version?
+        # TODO: first implement regular Graph LSTM, then test, then hand-specific version
 
         # TODO: unit tests
 
+        # TODO: write Yang about the following
         # IMPLEMENTATION DIFFERS FROM PAPER: in eq. (2) g^f_ij uses h_j,t regardless of if node j has been updated
         # already or not. Implemented here is h_j,t for non-updated nodes and h_j,t+1 for updated nodes
 
         # wrap neighbour_states into tensor
         neighbour_states_tensor = array_ops.stack(neighbour_states)
 
-        # flip dimensions 0 and 1 to have two vectors of n hs and n js instead of n vectors of (h,j) tuples
+        # flip dimensions 0 and 1 to have two vectors of n ms and n hs instead of n vectors of (m,h) tuples
         m_j, h_j = array_ops.unstack(neighbour_states_tensor, axis=1)
 
         # averaged hidden states for neighbouring nodes h^-_{i,yt}
@@ -583,6 +584,7 @@ class GraphLSTMNet(RNNCell):
             raise TypeError(
                 "graph must be a Graph of package networkx, but saw: %s." % graph)
 
+        # TODO: graph.node[? graph[?
         return graph.node[node][CELL]
 
     def __init__(self, graph, state_is_tuple=True):
@@ -601,7 +603,7 @@ class GraphLSTMNet(RNNCell):
         """
         super(GraphLSTMNet, self).__init__()
         if not graph:
-            raise ValueError("Must specify graph of GraphLSTMCells for GraphLSTMNet.")
+            raise ValueError("Must specify graph for GraphLSTMNet.")
         if not isinstance(graph, nx.classes.graph.Graph):
             raise TypeError(
                 "graph must be a Graph of package networkx, but saw: %s." % graph)
