@@ -1,6 +1,6 @@
 import rnn_cell_impl as rci
 import networkx as nx
-#import graph as rci_graph
+import graph as rci_graph
 
 # test graph: 20 nodes
 _kickoff_hand = [("t0", "wrist"), ("i0", "wrist"), ("m0", "wrist"), ("r0", "wrist"), ("p0", "wrist"), ("i0", "m0"),
@@ -33,15 +33,26 @@ def test_init_GraphLSTMNet():
     except KeyError: pass
     else: print "04 GraphLSTMNet._cell() did not raise KeyError for node without cell"
 
-    print gnet._graph["wrist"]['cell']
+    gnet._graph.node["wrist"]["cell"] = 123
 
     a = gnet._cell("wrist")
     if a is not 123: print "05 GraphLSTMNet._cell() did not return expected value, but: %s" % str(a)
 
+# print node information for graph or GraphLSTMNet G
+def print_node(name, G):
+    if isinstance(G, rci.GraphLSTMNet):
+        g = G._graph
+        print "Node information for GraphLSTMNet %s:" % str(G)
+    else:
+        g = G
+        print "Node information for graph %s:" % str(G)
+    print "G[\"%s\"]: %s" % (name, str(g["wrist"]))
+    print "G.node[\"%s\"]: %s" % (name, str(g.node["wrist"]))
 
 
 
 def main():
+    # rci_graph.main()
     test_init_GraphLSTMNet()
     print "All tests done."
 
