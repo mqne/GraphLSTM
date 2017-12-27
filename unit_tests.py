@@ -1,5 +1,7 @@
 import rnn_cell_impl as rci
 import networkx as nx
+from tensorflow.python.ops import rnn_cell_impl as orig_rci
+#TODO what is tensorflow.python.user_ops for?
 import graph as rci_graph
 
 # test graph: 20 nodes
@@ -7,6 +9,29 @@ _kickoff_hand = [("t0", "wrist"), ("i0", "wrist"), ("m0", "wrist"), ("r0", "wris
                 ("m0", "r0"), ("r0", "p0"), ("t0", "t1"), ("t1", "t2"), ("i0", "i1"), ("i1", "i2"), ("i2", "i3"),
                 ("m0", "m1"), ("m1", "m2"), ("m2", "m3"), ("r0", "r1"), ("r1", "r2"), ("r2", "r3"), ("p0", "p1"),
                 ("p1", "p2"), ("p2", "p3")]
+
+
+_CELL = rci._CELL
+_INDEX = rci._INDEX
+
+# cell that always returns fixed value on call()
+class DummyCell(orig_rci.RNNCell):
+
+    def __init__(self, returnValue=None, state_is_tuple=True):
+        super(DummyCell, self).__init__()
+        self._returnValue = returnValue
+        self._state_is_tuple = state_is_tuple
+
+    @property
+    def state_size(self):
+        return None
+
+    @property
+    def output_size(self):
+        return None
+
+    def call(self, inputs):
+        return self._returnValue
 
 
 def test_init_GraphLSTMNet():
@@ -59,6 +84,16 @@ def test__cell_GraphLSTMNet(gnet=None):
 
     return gnet
 
+def test_call_uninodal_GraphLSTMNet():
+    uninodal_graph = nx.Graph()
+    uninodal_graph.add_node("node0")
+    gnet = rci.GraphLSTMNet(uninodal_graph)
+    print_node("node0", gnet)
+
+    # DummyCell, returnValue=None
+    gnet._graph.node["node0"][_CELL] = DummyCell()
+
+
 
 # print node information for graph or GraphLSTMNet G
 def print_node(name, G):
@@ -68,14 +103,15 @@ def print_node(name, G):
     else:
         g = G
         print "Node information for graph %s:" % str(G)
-    print "G[\"%s\"]: %s" % (name, str(g["wrist"]))
-    print "G.node[\"%s\"]: %s" % (name, str(g.node["wrist"]))
+    print "G[\"%s\"]: %s" % (name, str(g[name]))
+    print "G.node[\"%s\"]: %s" % (name, str(g.node[name]))
 
 
 def main():
     # rci_graph.main()
-    gnet = test_init_GraphLSTMNet()
-    test__cell_GraphLSTMNet(gnet)
+    test_init_GraphLSTMNet()
+    test__cell_GraphLSTMNet()
+    test_call_uninodal_GraphLSTMNet()
     print "All tests done."
 
 

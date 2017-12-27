@@ -469,6 +469,7 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
 
         self._visited = False  # TODO: potentially obsolete parameter?
 
+    # TODO potentially obsolete method?
     @property
     def visited(self):
         return self._visited
@@ -555,8 +556,9 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
 
 import networkx as nx
 
-CELL = "cell"
-INDEX = "index"
+# identifiers for node attributes
+_CELL = "cell"
+_INDEX = "index"
 
 
 class GraphLSTMNet(RNNCell):
@@ -585,7 +587,7 @@ class GraphLSTMNet(RNNCell):
                 "graph must be a Graph of package networkx, but saw: %s." % graph)
 
         # TODO: graph.node[? graph[?
-        return graph.node[node][CELL]
+        return graph.node[node][_CELL]
 
     def __init__(self, graph, state_is_tuple=True):
         """Create a Graph LSTM Network composed of a graph of GraphLSTMCells.
@@ -656,9 +658,9 @@ class GraphLSTMNet(RNNCell):
         for node_name, node_obj in sorted(self._graph.nodes(data=True), key=lambda x: x[1]['confidence'], reverse=True):
             with vs.variable_scope("cell_%s" % node_name):  # TODO: variable scope in other places
                 # extract GraphLSTMCell object from graph node
-                cell = node_obj[CELL]
+                cell = node_obj[_CELL]
                 # extract node index for state vector addressing
-                i = node_obj[INDEX]
+                i = node_obj[_INDEX]
                 # extract state of current cell
                 if self._state_is_tuple:
                     if not nest.is_sequence(state):
@@ -674,7 +676,7 @@ class GraphLSTMNet(RNNCell):
                 # extract and collect states of neighbouring cells
                 neighbour_states_array = []
                 for neighbour_name, neighbour_obj in nx.all_neighbors(self._graph, node_name):
-                    n_i = neighbour_obj[INDEX]
+                    n_i = neighbour_obj[_INDEX]
                     if self._state_is_tuple:
                         n_state = state[n_i]
                     else:
