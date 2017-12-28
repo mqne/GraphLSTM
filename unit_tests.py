@@ -88,22 +88,28 @@ def test__cell_GraphLSTMNet(gnet=None):
     return gnet
 
 
-def test_call_uninodal_GraphLSTMNet():
-    #sess = tf.InteractiveSession()
+def test_call_uninodal_GraphLSTMNet_notf():
     uninodal_graph = nx.Graph()
     uninodal_graph.add_node("node0")
     gnet = rci.GraphLSTMNet(uninodal_graph)
-    #tf.initialize_all_variables()
 
     # DummyCell, returnValue=None
     gnet._graph.node["node0"][_CELL] = DummyCell()
 
     # DummyCell, returnValue=(2,3)
-    gnet._graph.node["node0"][_CELL] = DummyCell((2,3))
-    gnet._graph.node["node0"][_CONFIDENCE] = 1
+    gnet._graph.node["node0"][_CELL] = DummyCell((True,3)).call
+    gnet._graph.node["node0"][_CONFIDENCE] = 0
     gnet._graph.node["node0"][_INDEX] = 0
     # TODO systematise this test (random.Int, random objects?)
+    # TODO make sure returned objects are comparable
     print gnet.call(([1]), (1, 2))
+
+
+def test_call_uninodal_GraphLSTMNet_tf():
+    # TODO
+    #sess = tf.InteractiveSession()
+    #tf.initialize_all_variables()
+    raise NotImplementedError
 
 # print node information for graph or GraphLSTMNet G
 def print_node(name, G):
@@ -121,7 +127,8 @@ def main():
     # rci_graph.main()
     test_init_GraphLSTMNet()
     test__cell_GraphLSTMNet()
-    test_call_uninodal_GraphLSTMNet()
+    test_call_uninodal_GraphLSTMNet_notf()
+    #test_call_uninodal_GraphLSTMNet_tf()
     print "All tests done."
 
 

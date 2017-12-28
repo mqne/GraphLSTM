@@ -690,7 +690,6 @@ class GraphLSTMNet(RNNCell):
                 # extract input of current cell from input tuple
                 cur_inp = inputs[i]
                 # run current cell
-                # TODO for testing purposes without tf.run or similar: cell.call(...)
                 cur_output, new_state = cell(cur_inp, cur_state, neighbour_states)
                 # store cell output and state in graph vector
                 graph_output[i] = cur_output
