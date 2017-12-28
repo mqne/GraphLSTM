@@ -1,5 +1,6 @@
 import rnn_cell_impl as rci
 import networkx as nx
+import tensorflow as tf
 from tensorflow.python.ops import rnn_cell_impl as orig_rci
 #TODO what is tensorflow.python.user_ops for?
 import graph as rci_graph
@@ -13,6 +14,7 @@ _kickoff_hand = [("t0", "wrist"), ("i0", "wrist"), ("m0", "wrist"), ("r0", "wris
 
 _CELL = rci._CELL
 _INDEX = rci._INDEX
+_CONFIDENCE = rci._CONFIDENCE
 
 # cell that always returns fixed value on call()
 class DummyCell(orig_rci.RNNCell):
@@ -30,7 +32,7 @@ class DummyCell(orig_rci.RNNCell):
     def output_size(self):
         return None
 
-    def call(self, inputs):
+    def call(self, inputs, state, neighbour_states):
         return self._returnValue
 
 
@@ -61,6 +63,7 @@ def test_init_GraphLSTMNet():
 
     return gnet
 
+
 def test__cell_GraphLSTMNet(gnet=None):
     if gnet is None:
         gnet = rci.GraphLSTMNet(nx.Graph(_kickoff_hand))
@@ -84,16 +87,23 @@ def test__cell_GraphLSTMNet(gnet=None):
 
     return gnet
 
+
 def test_call_uninodal_GraphLSTMNet():
+    #sess = tf.InteractiveSession()
     uninodal_graph = nx.Graph()
     uninodal_graph.add_node("node0")
     gnet = rci.GraphLSTMNet(uninodal_graph)
-    print_node("node0", gnet)
+    #tf.initialize_all_variables()
 
     # DummyCell, returnValue=None
     gnet._graph.node["node0"][_CELL] = DummyCell()
 
-
+    # DummyCell, returnValue=(2,3)
+    gnet._graph.node["node0"][_CELL] = DummyCell((2,3))
+    gnet._graph.node["node0"][_CONFIDENCE] = 1
+    gnet._graph.node["node0"][_INDEX] = 0
+    # TODO systematise this test (random.Int, random objects?)
+    print gnet.call(([1]), (1, 2))
 
 # print node information for graph or GraphLSTMNet G
 def print_node(name, G):

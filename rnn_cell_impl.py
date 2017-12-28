@@ -558,6 +558,7 @@ import networkx as nx
 
 # identifiers for node attributes
 _CELL = "cell"
+_CONFIDENCE = "confidence"
 _INDEX = "index"
 
 
@@ -654,8 +655,8 @@ class GraphLSTMNet(RNNCell):
         new_states = [None] * self._graph.number_of_nodes()
         graph_output = [None] * self._graph.number_of_nodes()
 
-        # iterate over cells in graph, starting with highest 'confidence' value
-        for node_name, node_obj in sorted(self._graph.nodes(data=True), key=lambda x: x[1]['confidence'], reverse=True):
+        # iterate over cells in graph, starting with highest confidence value
+        for node_name, node_obj in sorted(self._graph.nodes(data=True), key=lambda x: x[1][_CONFIDENCE], reverse=True):
             with vs.variable_scope("cell_%s" % node_name):  # TODO: variable scope in other places
                 # extract GraphLSTMCell object from graph node
                 cell = node_obj[_CELL]
@@ -689,6 +690,7 @@ class GraphLSTMNet(RNNCell):
                 # extract input of current cell from input tuple
                 cur_inp = inputs[i]
                 # run current cell
+                # TODO for testing purposes without tf.run or similar: cell.call(...)
                 cur_output, new_state = cell(cur_inp, cur_state, neighbour_states)
                 # store cell output and state in graph vector
                 graph_output[i] = cur_output
