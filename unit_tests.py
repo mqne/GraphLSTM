@@ -16,11 +16,12 @@ _CELL = rci._CELL
 _INDEX = rci._INDEX
 _CONFIDENCE = rci._CONFIDENCE
 
+
 # cell that always returns fixed value on call()
-class DummyCell(orig_rci.RNNCell):
+class DummyFixedCell(orig_rci.RNNCell):
 
     def __init__(self, returnValue=None, state_is_tuple=True):
-        super(DummyCell, self).__init__()
+        super(DummyFixedCell, self).__init__()
         self._returnValue = returnValue
         self._state_is_tuple = state_is_tuple
 
@@ -34,6 +35,25 @@ class DummyCell(orig_rci.RNNCell):
 
     def call(self, inputs, state, neighbour_states):
         return self._returnValue
+
+
+# cell that always returns inputs, state, and neighbour_states on call()
+class DummyReturnCell(orig_rci.RNNCell):
+
+    def __init__(self, state_is_tuple=True):
+        super(DummyReturnCell, self).__init__()
+        self._state_is_tuple = state_is_tuple
+
+    @property
+    def state_size(self):
+        return None
+
+    @property
+    def output_size(self):
+        return None
+
+    def call(self, inputs, state, neighbour_states):
+        return (inputs, state, neighbour_states), (neighbour_states, state, inputs)
 
 
 def test_init_GraphLSTMNet():
@@ -71,14 +91,14 @@ def test__cell_GraphLSTMNet(gnet=None):
     gnet._graph.node["wrist"]["cell"] = 123
     a = gnet._cell("wrist")
 
-    if a is not 123: print "10 GraphLSTMNet._cell() did not return expected value (int:123), but: %s" % str(a)
+    if a != 123: print "10 GraphLSTMNet._cell() did not return expected value (int:123), but: %s" % str(a)
 
     glcell = rci.GraphLSTMCell
     b = glcell(1)
     gnet._graph.node["t0"]["cell"] = b
     a = gnet._cell("t0")
 
-    if a is not b: print "11 GraphLSTMNet._cell() did not return expected value (%s), but: %s" % (str(b), str(a))
+    if a is not b: print "11 GraphLSTMNet._cell() did not return expected object (%s), but: %s" % (str(b), str(a))
 
     b = glcell(1)
 
@@ -90,19 +110,36 @@ def test__cell_GraphLSTMNet(gnet=None):
 
 def test_call_uninodal_GraphLSTMNet_notf():
     uninodal_graph = nx.Graph()
-    uninodal_graph.add_node("node0")
+    cname = "node0"
+    uninodal_graph.add_node(cname)
     gnet = rci.GraphLSTMNet(uninodal_graph)
+    cell_input, cell_state_m, cell_state_h, cell_cur_output, cell_new_state = objects(5)
+    gnet._graph.node[cname][_CONFIDENCE] = 0
+    gnet._graph.node[cname][_INDEX] = 0
 
-    # DummyCell, returnValue=None
-    gnet._graph.node["node0"][_CELL] = DummyCell()
+    # test correct returning of cell return value
+    gnet._graph.node[cname][_CELL] = DummyFixedCell((cell_cur_output, cell_new_state)).call
+    net_output = gnet.call(([cell_input]), ((cell_state_m, cell_state_h),))
+    expected = ((cell_cur_output,), (cell_new_state,))
+    if net_output != expected:
+        print "20 GraphLSTNet.call() did not return expected objects %s, but %s. " \
+              "There is probably an error in GraphLSTMNet AFTER calling the cell." % (str(expected), str(net_output))
 
-    # DummyCell, returnValue=(2,3)
-    gnet._graph.node["node0"][_CELL] = DummyCell((True,3)).call
-    gnet._graph.node["node0"][_CONFIDENCE] = 0
-    gnet._graph.node["node0"][_INDEX] = 0
-    # TODO systematise this test (random.Int, random objects?)
-    # TODO make sure returned objects are comparable
-    print gnet.call(([1]), (1, 2))
+    # test correct delivering of parameters to cell
+    gnet._graph.node[cname][_CELL] = DummyReturnCell().call
+    net_output = gnet.call(([cell_input]), ((cell_state_m, cell_state_h),))
+    expected = (((cell_input, (cell_state_m, cell_state_h), tuple()),),
+                ((tuple(), (cell_state_m, cell_state_h), cell_input),))
+    if net_output != expected:
+        print "21 GraphLSTNet.call() did not deliver expected objects %s to cell, but %s " \
+              "If Error 20 did not appear, there is probably an error in  GraphLSTMNet BEFORE calling the cell."\
+              % (str(expected), str(net_output))
+
+    # check proper index handling
+    gnet._graph.node[cname][_INDEX] = 1
+    try: gnet.call(([cell_input]), ((cell_state_m, cell_state_h),))
+    except IndexError: pass
+    else: print "22 GraphLSTMNet with one node did not complain about index 1"
 
 
 def test_call_uninodal_GraphLSTMNet_tf():
@@ -122,9 +159,15 @@ def print_node(name, G):
     print "G[\"%s\"]: %s" % (name, str(g[name]))
     print "G.node[\"%s\"]: %s" % (name, str(g.node[name]))
 
+# return tuple of n objects
+def objects(n):
+    r = []
+    for _ in xrange(n):
+        r.append(object())
+    return tuple(r)
+
 
 def main():
-    # rci_graph.main()
     test_init_GraphLSTMNet()
     test__cell_GraphLSTMNet()
     test_call_uninodal_GraphLSTMNet_notf()
