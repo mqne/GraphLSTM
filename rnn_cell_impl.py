@@ -371,7 +371,7 @@ class BasicLSTMCell(RNNCell):
     @property
     def state_size(self):
         return (LSTMStateTuple(self._num_units, self._num_units)
-        if self._state_is_tuple else 2 * self._num_units)
+                if self._state_is_tuple else 2 * self._num_units)
 
     @property
     def output_size(self):
@@ -587,7 +587,6 @@ class GraphLSTMNet(RNNCell):
             raise TypeError(
                 "graph must be a Graph of package networkx, but saw: %s." % graph)
 
-        # TODO: graph.node[? graph[?
         return graph.node[node][_CELL]
 
     def __init__(self, graph, state_is_tuple=True):
@@ -657,6 +656,7 @@ class GraphLSTMNet(RNNCell):
 
         # iterate over cells in graph, starting with highest confidence value
         for node_name, node_obj in sorted(self._graph.nodes(data=True), key=lambda x: x[1][_CONFIDENCE], reverse=True):
+            # TODO variable scope to include graphLSTM name/instance-id/or similar
             with vs.variable_scope("cell_%s" % node_name):  # TODO: variable scope in other places
                 # extract GraphLSTMCell object from graph node
                 cell = node_obj[_CELL]
