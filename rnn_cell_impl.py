@@ -533,7 +533,7 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
         # flip dimensions 0 and 1 to have two vectors of n ms and n hs instead of n vectors of (m,h) tuples
         m_j, h_j = array_ops.unstack(neighbour_states_tensor, axis=1)
 
-        # averaged hidden states for neighbouring nodes h^-_{i,yt}
+        # averaged hidden states for neighbouring nodes h^-_{i,t}
         h_j_avg = math_ops.reduce_mean(h_j, axis=0)
 
         # here begin foreign codes
@@ -589,7 +589,7 @@ class GraphLSTMNet(RNNCell):
 
         return graph.node[node][_CELL]
 
-    def __init__(self, graph, state_is_tuple=True):
+    def __init__(self, graph, state_is_tuple=True, name=None):
         """Create a Graph LSTM Network composed of a graph of GraphLSTMCells.
 
         Args:
@@ -603,7 +603,7 @@ class GraphLSTMNet(RNNCell):
           ValueError: if graph is empty (not allowed), or at least one of the cells
             returns a state tuple but the flag `state_is_tuple` is `False`.
         """
-        super(GraphLSTMNet, self).__init__()
+        super(GraphLSTMNet, self).__init__(name=name)
         if not graph:
             raise ValueError("Must specify graph for GraphLSTMNet.")
         if not isinstance(graph, nx.classes.graph.Graph):
@@ -650,6 +650,9 @@ class GraphLSTMNet(RNNCell):
         if len(inputs) is not self._graph.number_of_nodes():
             raise ValueError("Number of nodes in GraphLSTMNet input %d does not match number of graph nodes %d" %
                              (len(inputs), self._graph.number_of_nodes()))
+
+        # TODO: check how _linear() gets its tf variables (generation vs. reusing)
+        # and use that knowledge for U and other variables
 
         new_states = [None] * self._graph.number_of_nodes()
         graph_output = [None] * self._graph.number_of_nodes()

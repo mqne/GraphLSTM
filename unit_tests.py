@@ -167,12 +167,17 @@ def objects(n):
     return tuple(r)
 
 
+def dirty_tests():
+    pass
+
+
 def main():
     test_init_GraphLSTMNet()
     test__cell_GraphLSTMNet()
     test_call_uninodal_GraphLSTMNet_notf()
     #test_call_uninodal_GraphLSTMNet_tf()
     print "All tests done."
+    dirty_tests()
 
 
 main()
