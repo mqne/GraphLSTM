@@ -9,5 +9,6 @@ z = tf.stack((x,y))
 a = tf.unstack(z, axis=1)
 
 b = tf.reduce_mean(z, axis=[0])
-
-print s.run([b, z])
+x += y
+x += y
+print s.run(x)

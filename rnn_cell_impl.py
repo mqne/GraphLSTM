@@ -371,7 +371,7 @@ class BasicLSTMCell(RNNCell):
     @property
     def state_size(self):
         return (LSTMStateTuple(self._num_units, self._num_units)
-                if self._state_is_tuple else 2 * self._num_units)
+        if self._state_is_tuple else 2 * self._num_units)
 
     @property
     def output_size(self):
@@ -477,7 +477,7 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
     @property
     def state_size(self):
         return (LSTMStateTuple(self._num_units, self._num_units)
-                if self._state_is_tuple else 2 * self._num_units)
+        if self._state_is_tuple else 2 * self._num_units)
 
     @property
     def output_size(self):
@@ -552,6 +552,74 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
         else:
             new_state = array_ops.concat([new_m, new_h], 1)
         return new_h, new_state
+
+# TODO: write tests
+# calculates terms like W * f + U * h + b
+def _graphlstm_linear(weight_names, args,
+                      output_size,
+                      bias=True,
+                      bias_initializer=None,
+                      weight_initializer=None):
+    """Linear map: sum_i(args[i] * weights[i]), where weights[i] can be multiple variables.
+
+    Args:
+      args: a 2D Tensor or a list of 2D, batch x n, Tensors.
+      weight_names: a string or list of strings
+      output_size: int, second dimension of W[i].
+      bias: boolean, whether to add a bias term or not.
+      bias_initializer: starting value to initialize the bias
+        (default is all zeros).
+      weight_initializer: starting value to initialize the weight.
+
+    Returns:
+      A 2D Tensor with shape [batch x output_size] equal to
+      sum_i(args[i] * W[i]), where W[i]s are newly created matrices.
+
+    Raises:
+      ValueError: if some of the arguments has unspecified or wrong shape.
+    """
+    if args is None or (nest.is_sequence(args) and not args):
+        raise ValueError("`args` must be specified")
+    if weight_names is None or (nest.is_sequence(weight_names) and not weight_names):
+        raise ValueError("`weight_names` must be specified")
+    if not nest.is_sequence(args):
+        args = [args]
+    if not nest.is_sequence(weight_names):
+        weight_names = [weight_names]
+
+    # for each variable in 'args' there needs to be exactly one in "weights", plus bias
+    if bias:
+        if len(weight_names) != len(args) + 1:
+            raise ValueError("If `bias` is True, `weight_names` needs to be one element longer than `args`,"
+                             " but found: %d and %d, respectively" % (len(weight_names), len(args)))
+    else:
+        if len(weight_names) != len(args):
+            raise ValueError("If `bias` is False, `weight_names` and `args` need to be of the same length,"
+                             " but found: %d and %d, respectively" % (len(weight_names), len(args)))
+
+    dtype = [a.dtype for a in args][0]
+
+    # Now the computation.
+    scope = vs.get_variable_scope()
+    with vs.variable_scope(scope) as outer_scope:
+        summands = []
+        for i, x in enumerate(args):
+            weight = vs.get_variable(
+                name=weight_names[i], shape=[x.get_shape()[1].value, output_size],
+                dtype=dtype,
+                initializer=weight_initializer)
+            summands.append(math_ops.matmul(x, weight))
+        if bias:
+            with vs.variable_scope(outer_scope) as inner_scope:
+                inner_scope.set_partitioner(None)
+                if bias_initializer is None:
+                    bias_initializer = init_ops.constant_initializer(0.0, dtype=dtype)
+                b = vs.get_variable(
+                    name=weight_names[-1], shape=[output_size],
+                    dtype=dtype,
+                    initializer=bias_initializer)
+                summands.append(b)
+        return math_ops.add_n(summands)
 
 
 import networkx as nx
@@ -701,7 +769,7 @@ class GraphLSTMNet(RNNCell):
         # pack results and return
         graph_output = tuple(graph_output)
         new_states = (tuple(new_states) if self._state_is_tuple else
-                      array_ops.concat(new_states, 1))
+        array_ops.concat(new_states, 1))
 
         return graph_output, new_states
 
