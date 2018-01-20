@@ -12,3 +12,13 @@ b = tf.reduce_mean(z, axis=[0])
 x += y
 x += y
 print s.run(x)
+
+import unittest
+
+class LSM(unittest.TestCase):
+    def setUp(self):
+        self.longMessage = True
+    def tes_abc(self):
+        self.assertTrue(0, msg="oh shit, %s ain't true")
+
+unittest.main()

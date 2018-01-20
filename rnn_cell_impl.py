@@ -553,6 +553,7 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
             new_state = array_ops.concat([new_m, new_h], 1)
         return new_h, new_state
 
+
 # TODO: write tests
 # calculates terms like W * f + U * h + b
 def _graphlstm_linear(weight_names, args,
