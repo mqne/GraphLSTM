@@ -18,7 +18,10 @@ import unittest
 class LSM(unittest.TestCase):
     def setUp(self):
         self.longMessage = True
-    def tes_abc(self):
+    def test_abc(self):
         self.assertTrue(0, msg="oh shit, %s ain't true")
+    def test_cdf(self):
+        self.assertEqual(0,1)
+        self.assertEqual(0,2)
 
 unittest.main()
