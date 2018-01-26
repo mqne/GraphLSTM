@@ -10,6 +10,9 @@ z = tf.stack((x,y))
 a = tf.unstack(z, axis=1)
 
 b = tf.reduce_mean(z, axis=[0])
+x += y
+x += y
+print s.run(x)
 
 with tf.variable_scope("scope_tests_m") as outer_scope:
     z = rci._linear([x,y],4,False)
@@ -20,3 +23,15 @@ tf.initialize_all_variables()
 tf.scope
 
 print s.run([z])
+import unittest
+
+class LSM(unittest.TestCase):
+    def setUp(self):
+        self.longMessage = True
+    def test_abc(self):
+        self.assertTrue(0, msg="oh shit, %s ain't true")
+    def test_cdf(self):
+        self.assertEqual(0,1)
+        self.assertEqual(0,2)
+
+unittest.main()
