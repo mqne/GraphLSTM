@@ -1,4 +1,5 @@
 import tensorflow as tf
+import rnn_cell_impl as rci
 
 s = tf.Session()
 
@@ -10,4 +11,12 @@ a = tf.unstack(z, axis=1)
 
 b = tf.reduce_mean(z, axis=[0])
 
-print s.run([b, z])
+with tf.variable_scope("scope_tests_m") as outer_scope:
+    z = rci._linear([x,y],4,False)
+    c = tf.get_variable("c", [1], initializer=tf.random_normal_initializer())
+
+# y = tf.variables_initializer([z])
+tf.initialize_all_variables()
+tf.scope
+
+print s.run([z])
