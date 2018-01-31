@@ -123,6 +123,19 @@ class TestGraphLSTMNet(unittest.TestCase):
         pass
 
 
+class TestGraphLSTMLinear(unittest.TestCase):
+
+    def setUp(self):
+        self.longMessage = True
+        self.func = rci._graphlstm_linear
+
+    def test_errors(self):
+        self.assertRaisesRegexp(ValueError, "args", self.func, ['_'], [], 1)
+        self.assertRaisesRegexp(ValueError, "weight_names", self.func, [], ['_'], 1)
+        self.assertRaisesRegexp(ValueError, "True.*one element longer", self.func, ['1', '2'], ['1', '2'], 1, bias=True)
+        self.assertRaisesRegexp(ValueError, "False.*same length", self.func, ['1', '2'], ['1'], 1, bias=False)
+
+
 # print node information for graph or GraphLSTMNet g
 def print_node(name, g):
     if isinstance(g, rci.GraphLSTMNet):
