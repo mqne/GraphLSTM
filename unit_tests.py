@@ -135,6 +135,9 @@ class TestGraphLSTMLinear(unittest.TestCase):
         self.assertRaisesRegexp(ValueError, "True.*one element longer", self.func, ['1', '2'], ['1', '2'], 1, bias=True)
         self.assertRaisesRegexp(ValueError, "False.*same length", self.func, ['1', '2'], ['1'], 1, bias=False)
 
+    def test_call(self):
+        pass
+
 
 # print node information for graph or GraphLSTMNet g
 def print_node(name, g):
