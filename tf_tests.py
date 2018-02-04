@@ -26,13 +26,19 @@ def main(*argv):
     #tf.scope
 
     gl = rci._graphlstm_linear
+    _ = gl("ll", x, 20, bias=False, weight_initializer=tf.constant_initializer([[0, 1], [-1, 1]]))
+
+    l = rci._linear(x, 20, False)
+    m = rci._linear(y, 10, False)
+
     scope = "test_scope"
     with tf.variable_scope(scope) as outer_scope:
         w = tf.convert_to_tensor([[0, 1], [1, 0]], name="w")
         x = tf.convert_to_tensor([[3, 2]], name="x")
+        with tf.variable_scope(outer_scope, reuse=tf.AUTO_REUSE):
 
-    result = gl("ll", x, 20, bias=False, weight_initializer=tf.constant_initializer([[0, 1], [-1, 1]])) # todo: understand
-    result2 = gl("jll", x, 2, bias=False)
+            result = gl("ll", x, 20, bias=False) # todo: understand
+            result2 = gl("ll", x, 20, bias=False)
     print result
     print x
     print x.get_shape()[1]

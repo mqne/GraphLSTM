@@ -720,8 +720,13 @@ class GraphLSTMNet(RNNCell):
             raise ValueError("Number of nodes in GraphLSTMNet input %d does not match number of graph nodes %d" %
                              (len(inputs), self._graph.number_of_nodes()))
 
-        # TODO: check how _linear() gets its tf variables (generation vs. reusing)
+        # check how _linear() gets its tf variables (generation vs. reusing)
         # and use that knowledge for U and other variables
+        # SOLVED: normal LSTM cells are created each in their own scope, and _linear gets called only once by each cell
+        # as a cell is not really an object that gets called, but a chain of ops that gets trained or evaluated
+        # weights shared between cells (e.g. Ufn) and weights unique for each cell (e.g. Uf): how to handle?
+        # ^this is for global Ufn local Un, which is NOT in the original paper! Paper: everything is global
+        # TODO: all weights global, tf.AUTO_REUSE in cell? init all weights in net?
 
         new_states = [None] * self._graph.number_of_nodes()
         graph_output = [None] * self._graph.number_of_nodes()
