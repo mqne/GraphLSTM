@@ -554,30 +554,31 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
         return new_h, new_state
 
 
-# TODO: write tests
 # calculates terms like W * f + U * h + b
 def _graphlstm_linear(weight_names, args,
                       output_size,
-                      bias=True,
+                      bias,
                       bias_initializer=None,
-                      weight_initializer=None):
+                      weight_initializer=None, reuse_weights=None):
     """Linear map: sum_i(args[i] * weights[i]), where weights[i] can be multiple variables.
 
     Args:
-      args: a 2D Tensor or a list of 2D, batch x n, Tensors.
       weight_names: a string or list of strings
+      args: a 2D Tensor or a list of 2D, batch x n, Tensors.
       output_size: int, second dimension of W[i].
       bias: boolean, whether to add a bias term or not.
       bias_initializer: starting value to initialize the bias
         (default is all zeros).
       weight_initializer: starting value to initialize the weight.
+      reuse_weights: a string or list of strings for which weights should be reused
 
     Returns:
       A 2D Tensor with shape [batch x output_size] equal to
-      sum_i(args[i] * W[i]), where W[i]s are newly created matrices.
+      sum_i(args[i] * W[i]), where W[i]s are newly created matrices for each W[i] not to be reused
 
     Raises:
       ValueError: if some of the arguments has unspecified or wrong shape.
+      LookupError: if a weight name specified to be reused does not appear in the list of weights.
     """
     if args is None or (nest.is_sequence(args) and not args):
         raise ValueError("`args` must be specified")
@@ -587,6 +588,12 @@ def _graphlstm_linear(weight_names, args,
         args = [args]
     if not nest.is_sequence(weight_names):
         weight_names = [weight_names]
+    if reuse_weights is not None:
+        if not nest.is_sequence(reuse_weights):
+            reuse_weights = [reuse_weights]
+        for w in reuse_weights:
+            if w not in weight_names:
+                raise LookupError("'%s' in `reuse_weights` not found in `weight_names`" % str(w))
 
     # for each variable in 'args' there needs to be exactly one in "weights", plus bias
     if bias:
@@ -605,13 +612,17 @@ def _graphlstm_linear(weight_names, args,
     with vs.variable_scope(scope) as outer_scope:
         summands = []
         for i, x in enumerate(args):
-            weight = vs.get_variable(
-                name=weight_names[i], shape=[x.get_shape()[1].value, output_size],
-                dtype=dtype,
-                initializer=weight_initializer)
-            summands.append(math_ops.matmul(x, weight))
+            reuse = True if reuse_weights is not None and weight_names[i] in reuse_weights else None
+            with vs.variable_scope(outer_scope, reuse=reuse):
+                weight = vs.get_variable(
+                    name=weight_names[i], shape=[x.get_shape()[1].value, output_size],
+                    dtype=dtype,
+                    initializer=weight_initializer)
+            summands.append(math_ops.matmul(weight, x))
+        res = math_ops.add_n(summands)
         if bias:
-            with vs.variable_scope(outer_scope) as inner_scope:
+            reuse = True if reuse_weights is not None and weight_names[-1] in reuse_weights else None
+            with vs.variable_scope(outer_scope, reuse=reuse) as inner_scope:
                 inner_scope.set_partitioner(None)
                 if bias_initializer is None:
                     bias_initializer = init_ops.constant_initializer(0.0, dtype=dtype)
@@ -619,8 +630,9 @@ def _graphlstm_linear(weight_names, args,
                     name=weight_names[-1], shape=[output_size],
                     dtype=dtype,
                     initializer=bias_initializer)
-                summands.append(b)
-        return math_ops.add_n(summands)
+                res = nn_ops.bias_add(res, b)
+        return res
+
 
 
 import networkx as nx
@@ -686,6 +698,8 @@ class GraphLSTMNet(RNNCell):
                 raise ValueError("Some cells return tuples of states, but the flag "
                                  "state_is_tuple is not set.  State sizes are: %s"
                                  % str([self._cell(n).state_size for n in self._graph]))
+
+        # TODO init weights (W*, U*, U*n, b*) here for global weights
 
     @property
     def state_size(self):

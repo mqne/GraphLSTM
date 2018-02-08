@@ -2,6 +2,7 @@ import tensorflow as tf
 import rnn_cell_impl as rci
 import unittest
 
+
 def main(*argv):
 
     sess = tf.Session()
@@ -28,8 +29,8 @@ def main(*argv):
     gl = rci._graphlstm_linear
     _ = gl("ll", x, 20, bias=False, weight_initializer=tf.constant_initializer([[0, 1], [-1, 1]]))
 
-    l = rci._linear(x, 20, False)
-    m = rci._linear(y, 10, False)
+    #l = rci._linear(x, 20, False)
+    #m = rci._linear(y, 10, False)
 
     scope = "test_scope"
     with tf.variable_scope(scope) as outer_scope:
@@ -37,7 +38,7 @@ def main(*argv):
         x = tf.convert_to_tensor([[3, 2]], name="x")
         with tf.variable_scope(outer_scope, reuse=tf.AUTO_REUSE):
 
-            result = gl("ll", x, 20, bias=False) # todo: understand
+            result = gl("ll", x, 20, bias=False)
             result2 = gl("ll", x, 20, bias=False)
     print result
     print x

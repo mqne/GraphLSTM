@@ -1,6 +1,7 @@
 import rnn_cell_impl as rci
 import networkx as nx
 import tensorflow as tf
+import numpy as np
 from tensorflow.python.ops import rnn_cell_impl as orig_rci
 # TODO what is tensorflow.python.user_ops for?
 import graph as rci_graph
@@ -129,14 +130,47 @@ class TestGraphLSTMLinear(unittest.TestCase):
         self.longMessage = True
         self.func = rci._graphlstm_linear
 
-    def test_errors(self):
-        self.assertRaisesRegexp(ValueError, "args", self.func, ['_'], [], 1)
-        self.assertRaisesRegexp(ValueError, "weight_names", self.func, [], ['_'], 1)
-        self.assertRaisesRegexp(ValueError, "True.*one element longer", self.func, ['1', '2'], ['1', '2'], 1, bias=True)
-        self.assertRaisesRegexp(ValueError, "False.*same length", self.func, ['1', '2'], ['1'], 1, bias=False)
+        self.sess = tf.Session()
+        self.x = tf.constant([[1., 2.], [3., 4.]])
+        self.y = tf.constant([[5., 6.], [7., 8.]])
+        self.custom_initializer_1 = tf.constant_initializer([[0, -1], [2, 1]])
 
-    def test_call(self):
-        pass
+    def test_errors(self):
+        self.assertRaisesRegexp(ValueError, "args", self.func, ['_'], [], 1, True)
+        self.assertRaisesRegexp(ValueError, "weight_names", self.func, [], ['_'], 1, True)
+        self.assertRaisesRegexp(ValueError, "True.*one element longer", self.func, ['1', '2'], ['1', '2'], 1, True)
+        self.assertRaisesRegexp(ValueError, "False.*same length", self.func, ['1', '2'], ['1'], 1, False)
+        self.assertRaisesRegexp(LookupError, "`reuse_weights`", self.func, ['1', '2'], ['3', '4'], 1, False,
+                                reuse_weights=['3'])
+
+    def test_calc(self):
+        w1 = "weight_name_1"
+        w2 = "weight_name_2"
+        b1 = "bias_name_1"
+        b2 = "bias_name_2"
+        n = "non_existing_name"
+
+        # w1 (1 1,1 1) * x
+        glw1x = self.func([w1], self.x, 2, False, weight_initializer=tf.ones_initializer)
+        glw1x_expected_result = [[4, 6], [4, 6]]
+        # existing variable should throw error when fetched without reuse
+        self.assertRaisesRegexp(ValueError, "already exists", self.func, w1, self.x, 2, False)
+        # new variable should throw error when fetched with reuse
+        self.assertRaisesRegexp(ValueError, "does not exist", self.func, n, self.x, 2, False, reuse_weights=n)
+        # w1 * x + w2 (0 -1,2 1) * y + b1 (0 0)
+        glw1xw2yb1 = self.func([w1, w2, b1], [self.x, self.y], 2, True, weight_initializer=self.custom_initializer_1,
+                               reuse_weights=[w1])
+        glw1xw2yb1_expected_result = [[-3, -2], [21, 26]]
+        # w1 * y + w2 * y + b2 (1 1)
+        glw1yw2xb2 = self.func([w1, w2, b2], [self.y, self.x], 2, True, bias_initializer=tf.ones_initializer,
+                               reuse_weights=[w1, w2])
+        glw1yw2xb2_expected_result = [[10, 11], [18, 23]]
+
+        self.sess.run(tf.global_variables_initializer())
+
+        np.testing.assert_equal(self.sess.run(glw1x), glw1x_expected_result)
+        np.testing.assert_equal(self.sess.run(glw1xw2yb1), glw1xw2yb1_expected_result)
+        np.testing.assert_equal(self.sess.run(glw1yw2xb2), glw1yw2xb2_expected_result)
 
 
 # print node information for graph or GraphLSTMNet g
