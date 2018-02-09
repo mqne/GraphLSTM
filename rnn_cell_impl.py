@@ -618,7 +618,7 @@ def _graphlstm_linear(weight_names, args,
                     name=weight_names[i], shape=[x.get_shape()[1].value, output_size],
                     dtype=dtype,
                     initializer=weight_initializer)
-            summands.append(math_ops.matmul(weight, x))
+            summands.append(math_ops.matmul(x, weight))
         res = math_ops.add_n(summands)
         if bias:
             reuse = True if reuse_weights is not None and weight_names[-1] in reuse_weights else None
