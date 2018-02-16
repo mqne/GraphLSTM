@@ -504,9 +504,9 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
 
         # Parameters of gates are concatenated into one multiply for efficiency.
         if self._state_is_tuple:
-            m, h = state
+            m_i, h_i = state
         else:
-            m, h = array_ops.split(value=state, num_or_size_splits=2, axis=1)
+            m_i, h_i = array_ops.split(value=state, num_or_size_splits=2, axis=1)
 
         # TODO: understand variable_scope for cell-local and graph-global variables ...
 
@@ -533,18 +533,45 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
         # flip dimensions 0 and 1 to have two vectors of n ms and n hs instead of n vectors of (m,h) tuples
         m_j, h_j = array_ops.unstack(neighbour_states_tensor, axis=1)
 
-        # averaged hidden states for neighbouring nodes h^-_{i,t}
+        # Eq. 1: averaged hidden states for neighbouring nodes h^-_{i,t}
         h_j_avg = math_ops.reduce_mean(h_j, axis=0)
+
+        # define weight and bias names
+        w_u = "W_u"
+        w_f = "W_f"
+        w_c = "W_c"
+        w_o = "W_o"
+        u_u = "U_u"
+        u_f = "U_f"
+        u_c = "U_c"
+        u_o = "U_o"
+        u_un = "U_un"
+        u_fn = "U_fn"
+        u_cn = "U_cn"
+        u_on = "U_on"
+        b_u = "b_u"
+        b_f = "b_f"
+        b_c = "b_c"
+        b_o = "b_o"
+
+        # Eq. 2
+        # g_u = sigmoid ( f_{i,t+1} * W_u + h_{i,t} * U_u + h^-_{i,t} * U_{un} + b_u )
+        g_u = sigmoid(_graphlstm_linear([w_u, u_u, u_un, b_u], [inputs, h_i, h_j_avg], self.output_size, True))
+        # g_fij = sigmoid ( f_{i,t+1} * W_f + h_{j,t} * U_fn + b_f )
+        g_fij = sigmoid(_graphlstm_linear([w_f, u_fn, b_f], [inputs, h_j], self.output_size, True))
+        # g_fi = sigmoid ( f_{i,t+1} * W_f + h_{i,t} * U_f + b_f )
+        g_fij = sigmoid(_graphlstm_linear([w_f, u_f, b_f], [inputs, h_i], self.output_size, True,
+                                          reuse_weights=[w_f, b_f]))
 
         # here begin foreign codes
 
-        concat = _linear([inputs, h], 4 * self._num_units, True)
+        concat = _linear([inputs, h_i], 4 * self._num_units, True)
 
         # i = input_gate, j = new_input, f = forget_gate, o = output_gate
         i, j, f, o = array_ops.split(value=concat, num_or_size_splits=4, axis=1)
 
         new_m = (
-                m * sigmoid(f + self._forget_bias) + sigmoid(i) * self._activation(j))
+                m_i * sigmoid(f + self._forget_bias) + sigmoid(i) * self._activation(j))
         new_h = self._activation(new_m) * sigmoid(o)
 
         if self._state_is_tuple:
@@ -570,11 +597,11 @@ def _graphlstm_linear(weight_names, args,
       bias_initializer: starting value to initialize the bias
         (default is all zeros).
       weight_initializer: starting value to initialize the weight.
-      reuse_weights: a string or list of strings for which weights should be reused
+      reuse_weights: a string or list of strings defining which weights should be reused.
 
     Returns:
       A 2D Tensor with shape [batch x output_size] equal to
-      sum_i(args[i] * W[i]), where W[i]s are newly created matrices for each W[i] not to be reused
+      sum_i(args[i] * W[i]), where W[i]s are newly created matrices for each W[i] not to be reused.
 
     Raises:
       ValueError: if some of the arguments has unspecified or wrong shape.
