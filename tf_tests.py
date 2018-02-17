@@ -1,6 +1,7 @@
 import tensorflow as tf
 import rnn_cell_impl as rci
 import unittest
+import numpy as np
 
 
 def main(*argv):
@@ -8,6 +9,7 @@ def main(*argv):
     sess = tf.Session()
 
     x = tf.constant([[1., 2.], [3., 4.]])
+    x1 = tf.constant([[1., 2.], [3., 4.]])
     y = tf.constant([[5., 6.], [7., 8.]])
     z = tf.stack((x, y))
 
@@ -44,8 +46,17 @@ def main(*argv):
     print x
     print x.get_shape()[1]
 
+    xy1 = x1 * y
+    xy2 = tf.multiply(x1, y)
+    xy3 = tf.matmul(x1, y)
+
     sess.run(tf.global_variables_initializer())
     print sess.run({'result': result})
+    r = sess.run({"*": xy1, "multiply": xy2, "matmul": xy3})
+    print xy1
+    print xy2
+    print xy3
+    print np.array_equal(r["*"], r["multiply"])
 
 
 class LSM(unittest.TestCase):

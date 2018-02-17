@@ -91,7 +91,7 @@ def _concat(prefix, suffix, static=False):
         p = tensor_shape.as_shape(prefix)
         p_static = p.as_list() if p.ndims is not None else None
         p = (constant_op.constant(p.as_list(), dtype=dtypes.int32)
-        if p.is_fully_defined() else None)
+             if p.is_fully_defined() else None)
     if isinstance(suffix, ops.Tensor):
         s = suffix
         s_static = tensor_util.constant_value(suffix)
@@ -104,7 +104,7 @@ def _concat(prefix, suffix, static=False):
         s = tensor_shape.as_shape(suffix)
         s_static = s.as_list() if s.ndims is not None else None
         s = (constant_op.constant(s.as_list(), dtype=dtypes.int32)
-        if s.is_fully_defined() else None)
+             if s.is_fully_defined() else None)
 
     if static:
         shape = tensor_shape.as_shape(p_static).concatenate(s_static)
@@ -371,7 +371,7 @@ class BasicLSTMCell(RNNCell):
     @property
     def state_size(self):
         return (LSTMStateTuple(self._num_units, self._num_units)
-        if self._state_is_tuple else 2 * self._num_units)
+                if self._state_is_tuple else 2 * self._num_units)
 
     @property
     def output_size(self):
@@ -477,7 +477,7 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
     @property
     def state_size(self):
         return (LSTMStateTuple(self._num_units, self._num_units)
-        if self._state_is_tuple else 2 * self._num_units)
+                if self._state_is_tuple else 2 * self._num_units)
 
     @property
     def output_size(self):
@@ -508,14 +508,12 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
         else:
             m_i, h_i = array_ops.split(value=state, num_or_size_splits=2, axis=1)
 
-        # TODO: understand variable_scope for cell-local and graph-global variables ...
-
-        # ... TODO: "shared weight metrics Ufn for all nodes are learned to guarantee the spatial transformation
+        # "shared weight metrics Ufn for all nodes are learned to guarantee the spatial transformation
         # invariance and enable the learning with various neighbors": GraphLSTM cells have to be generalized to be able
         # to be applied to any random image superpixel region, whereas for hand pose estimation, we want each cell to
         # specialize on its joint
 
-        # TODO: in the paper, all cells are generalized and thus do not need to know about the nature of their
+        # in the paper, all cells are generalized and thus do not need to know about the nature of their
         # neighbours. However, we want cells specifically trained for certain joint, so information about which
         # neighbouring cell belongs to which node might be interesting ... kind of a "hard wired" Graph LSTM
         # But: that's good! -> Own contribution, learn generic hand model / even learn individual hand sizes?
@@ -523,15 +521,15 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
 
         # TODO: unit tests
 
-        # TODO: write Yang about the following
-        # IMPLEMENTATION DIFFERS FROM PAPER: in eq. (2) g^f_ij uses h_j,t regardless of if node j has been updated
-        # already or not. Implemented here is h_j,t for non-updated nodes and h_j,t+1 for updated nodes
-
         # wrap neighbour_states into tensor
         neighbour_states_tensor = array_ops.stack(neighbour_states)
 
         # flip dimensions 0 and 1 to have two vectors of n ms and n hs instead of n vectors of (m,h) tuples
         m_j, h_j = array_ops.unstack(neighbour_states_tensor, axis=1)
+        # IMPLEMENTATION DIFFERS FROM PAPER: in eq. (2) g^f_ij uses h_j,t regardless of if node j has been updated
+        # already or not. Implemented here is h_j,t for non-updated nodes and h_j,t+1 for updated nodes
+        # which both makes sense (most recent information)
+        # and is easier to implement (no need to keep track of old states)
 
         # Eq. 1: averaged hidden states for neighbouring nodes h^-_{i,t}
         h_j_avg = math_ops.reduce_mean(h_j, axis=0)
@@ -555,30 +553,38 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
         b_o = "b_o"
 
         # Eq. 2
+        # input gate
         # g_u = sigmoid ( f_{i,t+1} * W_u + h_{i,t} * U_u + h^-_{i,t} * U_{un} + b_u )
         g_u = sigmoid(_graphlstm_linear([w_u, u_u, u_un, b_u], [inputs, h_i, h_j_avg], self.output_size, True))
+        # adaptive forget gate
         # g_fij = sigmoid ( f_{i,t+1} * W_f + h_{j,t} * U_fn + b_f )
         g_fij = sigmoid(_graphlstm_linear([w_f, u_fn, b_f], [inputs, h_j], self.output_size, True))
+        # forget gate
         # g_fi = sigmoid ( f_{i,t+1} * W_f + h_{i,t} * U_f + b_f )
-        g_fij = sigmoid(_graphlstm_linear([w_f, u_f, b_f], [inputs, h_i], self.output_size, True,
-                                          reuse_weights=[w_f, b_f]))
+        g_fi = sigmoid(_graphlstm_linear([w_f, u_f, b_f], [inputs, h_i], self.output_size, True,
+                                         reuse_weights=[w_f, b_f]))
+        # output gate
+        # g_o = sigmoid ( f_{i,t+1} * W_o + h_{i,t} * U_o + h^-_{i,t} * U_{on} + b_o )
+        g_o = sigmoid(_graphlstm_linear([w_o, u_o, u_on, b_o], [inputs, h_i, h_j_avg], self.output_size, True))
+        # memory gate
+        # g_c = tanh ( f_{i,t+1} * W_c + h_{i,t} * U_c + h^-_{i,t} * U_{cn} + b_c )
+        g_c = tanh(_graphlstm_linear([w_c, u_c, u_cn, b_c], [inputs, h_i, h_j_avg], self.output_size, True))
 
-        # here begin foreign codes
+        # new memory states
+        # m_i_new = sum ( g_fij .* most recent state of each neighbouring node ) / number of neighbouring nodes ...
+        #       ... + g_fi .* m_i + g_u .* g_c
+        m_i_new = g_fij * math_ops.reduce_mean(m_j, axis=0) + g_fi * m_i + g_u * g_c
 
-        concat = _linear([inputs, h_i], 4 * self._num_units, True)
+        # new hidden states
+        # h_i_new = tanh ( g_o .* m_i_new )
+        h_i_new = tanh(g_o * m_i_new)
 
-        # i = input_gate, j = new_input, f = forget_gate, o = output_gate
-        i, j, f, o = array_ops.split(value=concat, num_or_size_splits=4, axis=1)
-
-        new_m = (
-                m_i * sigmoid(f + self._forget_bias) + sigmoid(i) * self._activation(j))
-        new_h = self._activation(new_m) * sigmoid(o)
-
+        # Eq. 3 (return values)
         if self._state_is_tuple:
-            new_state = LSTMStateTuple(new_m, new_h)
+            new_state = LSTMStateTuple(m_i_new, h_i_new)
         else:
-            new_state = array_ops.concat([new_m, new_h], 1)
-        return new_h, new_state
+            new_state = array_ops.concat([m_i_new, h_i_new], 1)
+        return h_i_new, new_state
 
 
 # calculates terms like W * f + U * h + b
@@ -659,7 +665,6 @@ def _graphlstm_linear(weight_names, args,
                     initializer=bias_initializer)
                 res = nn_ops.bias_add(res, b)
         return res
-
 
 
 import networkx as nx
@@ -775,7 +780,7 @@ class GraphLSTMNet(RNNCell):
         # iterate over cells in graph, starting with highest confidence value
         for node_name, node_obj in sorted(self._graph.nodes(data=True), key=lambda x: x[1][_CONFIDENCE], reverse=True):
             # TODO variable scope to include graphLSTM name/instance-id/or similar
-            with vs.variable_scope("cell_%s" % node_name):  # TODO: variable scope in other places
+            with vs.variable_scope("cell_%s" % node_name):  # TODO: variable scope here? in other places?
                 # extract GraphLSTMCell object from graph node
                 cell = node_obj[_CELL]
                 # extract node index for state vector addressing
@@ -816,7 +821,7 @@ class GraphLSTMNet(RNNCell):
         # pack results and return
         graph_output = tuple(graph_output)
         new_states = (tuple(new_states) if self._state_is_tuple else
-        array_ops.concat(new_states, 1))
+                      array_ops.concat(new_states, 1))
 
         return graph_output, new_states
 
@@ -1013,7 +1018,7 @@ class LSTMCell(RNNCell):
                     # pylint: enable=invalid-unary-operand-type
 
         new_state = (LSTMStateTuple(c, m) if self._state_is_tuple else
-        array_ops.concat([c, m], 1))
+                     array_ops.concat([c, m], 1))
         return m, new_state
 
 
@@ -1354,7 +1359,7 @@ class MultiRNNCell(RNNCell):
                 new_states.append(new_state)
 
         new_states = (tuple(new_states) if self._state_is_tuple else
-        array_ops.concat(new_states, 1))
+                      array_ops.concat(new_states, 1))
 
         return cur_inp, new_states
 
