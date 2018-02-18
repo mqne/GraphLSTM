@@ -415,7 +415,7 @@ class BasicLSTMCell(RNNCell):
         return new_h, new_state
 
 
-class GraphLSTMCell(RNNCell):  # TODO  modify this!
+class GraphLSTMCell(RNNCell):
     """Graph LSTM recurrent network cell.
 
     The implementation is an adaption of tensorflow's BasicLSTMCell
@@ -423,7 +423,10 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
 
     This class is part of the Master thesis of Matthias Kuehne at the
     Chair for Computer Aided Medical Procedures & Augmented Reality,
-    Technical University of Munich, Germany.
+    Technical University of Munich, Germany
+    in cooperation with the
+    Robotics Vision Lab,
+    Nara Institute of Science and Technology, Japan.
 
     The implementation is work in progress.
 
@@ -463,16 +466,9 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
                          "If it works, it is likely to be slower and will soon be "
                          "deprecated.  Use state_is_tuple=True.", self)
         self._num_units = num_units
-        self._forget_bias = forget_bias
+        self._forget_bias = forget_bias  # this parameter is currently ignored
         self._state_is_tuple = state_is_tuple
-        self._activation = activation or math_ops.tanh
-
-        self._visited = False  # TODO: potentially obsolete parameter?
-
-    # TODO potentially obsolete method?
-    @property
-    def visited(self):
-        return self._visited
+        self._activation = activation or math_ops.tanh  # this parameter is currently ignored
 
     @property
     def state_size(self):
@@ -519,20 +515,18 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
         # But: that's good! -> Own contribution, learn generic hand model / even learn individual hand sizes?
         # TODO: first implement regular Graph LSTM, then test, then hand-specific version
 
-        # TODO: unit tests
+        # TODO: unit tests for GraphLSTMCell.call
 
-        # wrap neighbour_states into tensor
-        neighbour_states_tensor = array_ops.stack(neighbour_states)
+        # extract two vectors of n ms and n hs from state vector of n (m,h) tuples
+        m_j_all, h_j_all = zip(*neighbour_states)
 
-        # flip dimensions 0 and 1 to have two vectors of n ms and n hs instead of n vectors of (m,h) tuples
-        m_j, h_j = array_ops.unstack(neighbour_states_tensor, axis=1)
         # IMPLEMENTATION DIFFERS FROM PAPER: in eq. (2) g^f_ij uses h_j,t regardless of if node j has been updated
         # already or not. Implemented here is h_j,t for non-updated nodes and h_j,t+1 for updated nodes
-        # which both makes sense (most recent information)
-        # and is easier to implement (no need to keep track of old states)
+        # which both makes sense intuitively (most recent information)
+        # and is more lightweight (no need to keep track of old states)
 
         # Eq. 1: averaged hidden states for neighbouring nodes h^-_{i,t}
-        h_j_avg = math_ops.reduce_mean(h_j, axis=0)
+        h_j_avg = math_ops.reduce_mean(h_j_all, axis=0)
 
         # define weight and bias names
         w_u = "W_u"
@@ -557,8 +551,8 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
         # g_u = sigmoid ( f_{i,t+1} * W_u + h_{i,t} * U_u + h^-_{i,t} * U_{un} + b_u )
         g_u = sigmoid(_graphlstm_linear([w_u, u_u, u_un, b_u], [inputs, h_i, h_j_avg], self.output_size, True))
         # adaptive forget gate
-        # g_fij = sigmoid ( f_{i,t+1} * W_f + h_{j,t} * U_fn + b_f )
-        g_fij = sigmoid(_graphlstm_linear([w_f, u_fn, b_f], [inputs, h_j], self.output_size, True))
+        # g_fij = sigmoid ( f_{i,t+1} * W_f + h_{j,t} * U_fn + b_f ) for every neighbour j
+        g_fij = [sigmoid(_graphlstm_linear([w_f, u_fn, b_f], [inputs, h_j], self.output_size, True)) for h_j in h_j_all]
         # forget gate
         # g_fi = sigmoid ( f_{i,t+1} * W_f + h_{i,t} * U_f + b_f )
         g_fi = sigmoid(_graphlstm_linear([w_f, u_f, b_f], [inputs, h_i], self.output_size, True,
@@ -573,7 +567,7 @@ class GraphLSTMCell(RNNCell):  # TODO  modify this!
         # new memory states
         # m_i_new = sum ( g_fij .* most recent state of each neighbouring node ) / number of neighbouring nodes ...
         #       ... + g_fi .* m_i + g_u .* g_c
-        m_i_new = g_fij * math_ops.reduce_mean(m_j, axis=0) + g_fi * m_i + g_u * g_c
+        m_i_new = math_ops.reduce_mean([g * m_j for g, m_j in zip(g_fij, m_j_all)], axis=0) + g_fi * m_i + g_u * g_c
 
         # new hidden states
         # h_i_new = tanh ( g_o .* m_i_new )
@@ -683,7 +677,10 @@ class GraphLSTMNet(RNNCell):
 
     This class is part of the Master thesis of Matthias Kuehne at the
     Chair for Computer Aided Medical Procedures & Augmented Reality,
-    Technical University of Munich, Germany.
+    Technical University of Munich, Germany
+    in cooperation with the
+    Robotics Vision Lab,
+    Nara Institute of Science and Technology, Japan.
 
     The implementation is work in progress."""
 
@@ -753,7 +750,7 @@ class GraphLSTMNet(RNNCell):
                 # presumably does not contain TensorArrays or anything else fancy
                 return super(GraphLSTMNet, self).zero_state(batch_size, dtype)
 
-    def call(self, inputs, state):  # TODO: adapt for Graph LSTM
+    def call(self, inputs, state):
         """Run this multi-layer cell on inputs, starting from state.
 
         Args:
@@ -801,7 +798,11 @@ class GraphLSTMNet(RNNCell):
                 neighbour_states_array = []
                 for neighbour_name, neighbour_obj in nx.all_neighbors(self._graph, node_name):
                     n_i = neighbour_obj[_INDEX]
-                    if self._state_is_tuple:
+                    # use updated state if node has been visited
+                    # TODO: think about giving old _and_ new states to node for 100% paper fidelity
+                    if new_states[n_i] is not None:
+                        n_state = new_states[n_i]
+                    elif self._state_is_tuple:
                         n_state = state[n_i]
                     else:
                         n_state_pos = cell.state_size * n_i
