@@ -2,6 +2,29 @@ import tensorflow as tf
 import rnn_cell_impl as rci
 import unittest
 import numpy as np
+import networkx as nx
+
+class DummyFixedTfCell(rci.RNNCell):
+    def __init__(self, num_units=1, memory_state=((2.,),), hidden_state=((3.,),), state_is_tuple=True):
+        if not state_is_tuple:
+            raise NotImplementedError("DummyFixedTfCell is only defined for state_is_tuple=True")
+        super(DummyFixedTfCell, self).__init__()
+        self._num_units = num_units
+        self._m = tf.constant(memory_state)
+        self._h = tf.constant(hidden_state)
+
+    @property
+    def state_size(self):
+        return self._num_units, self._num_units
+
+    @property
+    def output_size(self):
+        return self._num_units
+
+    def call(self, inputs, state, neighbour_states=None):
+        #return inputs, (inputs, inputs)
+        return self._h, (self._m, self._h)
+
 
 
 def main(*argv):
@@ -50,6 +73,12 @@ def main(*argv):
     xy2 = tf.multiply(x1, y)
     xy3 = tf.matmul(x1, y)
 
+    gr = nx.Graph()
+    gr.add_node("test")
+    dftcell1 = DummyFixedTfCell(num_units=2)
+
+    input_data = tf.placeholder(tf.float32, [None, None, 2])
+
     sess.run(tf.global_variables_initializer())
     print sess.run({'result': result})
     r = sess.run({"*": xy1, "multiply": xy2, "matmul": xy3})
@@ -57,6 +86,8 @@ def main(*argv):
     print xy2
     print xy3
     print np.array_equal(r["*"], r["multiply"])
+
+    print sess.run(tf.nn.dynamic_rnn(dftcell1, input_data, dtype=tf.float32), feed_dict={input_data: [[[1, 2]]]})
 
 
 class LSM(unittest.TestCase):

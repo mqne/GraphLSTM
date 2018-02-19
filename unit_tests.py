@@ -38,6 +38,27 @@ class DummyFixedCell(orig_rci.RNNCell):
         return self._returnValue
 
 
+class DummyFixedTfCell(orig_rci.RNNCell):
+    def __init__(self, num_units=1, memory_state=((2.,),), hidden_state=((3.,),), state_is_tuple=True):
+        if not state_is_tuple:
+            raise NotImplementedError("DummyFixedTfCell is only defined for state_is_tuple=True")
+        super(DummyFixedTfCell, self).__init__()
+        self._num_units = num_units
+        self._m = tf.constant(memory_state)
+        self._h = tf.constant(hidden_state)
+
+    @property
+    def state_size(self):
+        return self._num_units, self._num_units
+
+    @property
+    def output_size(self):
+        return self._num_units
+
+    def call(self, inputs, state, neighbour_states):
+        return self._h, (self._m, self._h)
+
+
 # cell that always returns inputs, state, and neighbour_states on call()
 class DummyReturnCell(orig_rci.RNNCell):
 
@@ -57,12 +78,37 @@ class DummyReturnCell(orig_rci.RNNCell):
         return (inputs, state, neighbour_states), (neighbour_states, state, inputs)
 
 
+# cell that always returns inputs  # todo: make results to include state and neighbour_states too?
+class DummyReturnTfCell(orig_rci.RNNCell):
+    def __init__(self, num_units, state_is_tuple=True):
+        if not state_is_tuple:
+            raise NotImplementedError("DummyFixedTfCell is only defined for state_is_tuple=True")
+        super(DummyReturnTfCell, self).__init__()
+        self._num_units = num_units
+
+    @property
+    def state_size(self):
+        return self._num_units, self._num_units
+
+    @property
+    def output_size(self):
+        return self._num_units
+
+    def call(self, inputs, state, neighbour_states):
+        return inputs, (inputs, inputs)
+
+
 class TestGraphLSTMNet(unittest.TestCase):
 
     def setUp(self):
         self.longMessage = True
         self.G = nx.Graph(_kickoff_hand)
         self.gnet = rci.GraphLSTMNet(self.G)
+        self.sess = tf.InteractiveSession()
+
+    def tearDown(self):
+        self.sess.close()
+        tf.reset_default_graph()
 
     def test_init(self):
         # GraphLSTMNet should complain when initiated with something else than a nx.Graph
@@ -89,13 +135,9 @@ class TestGraphLSTMNet(unittest.TestCase):
         self.assertIsNot(self.gnet._cell("t0"), b)
 
     def test_call_uninodal_notf(self):
-        uninodal_graph = nx.Graph()
-        cname = "node0"
-        uninodal_graph.add_node(cname)
-        unet = rci.GraphLSTMNet(uninodal_graph)
         cell_input, cell_state_m, cell_state_h, cell_cur_output, cell_new_state = objects(5)
-        unet._graph.node[cname][_CONFIDENCE] = 0
-        unet._graph.node[cname][_INDEX] = 0
+
+        unet, cname = self.get_uninodal_graphlstmnet()
 
         # test correct returning of cell return value
         unet._graph.node[cname][_CELL] = DummyFixedCell((cell_cur_output, cell_new_state)).call
@@ -117,11 +159,21 @@ class TestGraphLSTMNet(unittest.TestCase):
         self.assertRaises(IndexError, unet.call, ([cell_input]), ((cell_state_m, cell_state_h),))
 
     def test_call_uninodal_tf(self):
-        # TODO
-        print "Note: test_call_uninodal_tf is not implemented yet."
-        # sess = tf.InteractiveSession()
-        # tf.initialize_all_variables()
-        pass
+        net, cell_name = self.get_uninodal_graphlstmnet()
+        constant_cell_1 = DummyFixedTfCell()
+        net._graph.node[cell_name][_CELL] = constant_cell_1
+
+        # dimensions: batch_size, max_time, ... (cell dimensions, e.g. for GraphLSTMCell: input_size
+        input = tf.placeholder(tf.float32, [None, None, None])
+
+
+    def get_uninodal_graphlstmnet(self, cell_name="node0", confidence=0):
+        graph = nx.Graph()
+        graph.add_node(cell_name)
+        net = rci.GraphLSTMNet(graph)
+        net._graph.node[cell_name][_CONFIDENCE] = confidence
+        net._graph.node[cell_name][_INDEX] = 0
+        return net, cell_name
 
 
 class TestGraphLSTMLinear(unittest.TestCase):
@@ -130,11 +182,15 @@ class TestGraphLSTMLinear(unittest.TestCase):
         self.longMessage = True
         self.func = rci._graphlstm_linear
 
-        self.sess = tf.Session()
+        self.sess = tf.InteractiveSession()
         self.x = tf.constant([[1., 2.], [3., 4.]])
         self.y = tf.constant([[5., 6.], [7., 8.]])
         self.z = tf.constant([[0., 1.], [2., 3.], [4., 5.]])
         self.custom_initializer_1 = tf.constant_initializer([[0, -1], [2, 1]])
+
+    def tearDown(self):
+        self.sess.close()
+        tf.reset_default_graph()
 
     def test_errors(self):
         self.assertRaisesRegexp(ValueError, "args", self.func, ['_'], [], 1, True)
@@ -178,13 +234,13 @@ class TestGraphLSTMLinear(unittest.TestCase):
                             bias_initializer=tf.ones_initializer)
         glzw4b3_expected_result = [[2, 2, 2, 2], [6, 6, 6, 6], [10, 10, 10, 10]]
 
-        self.sess.run(tf.global_variables_initializer())
+        tf.global_variables_initializer().run()
 
-        np.testing.assert_equal(self.sess.run(glxw1), glxw1_expected_result)
-        np.testing.assert_equal(self.sess.run(glxw1yw2b1), glxw1yw2b1_expected_result)
-        np.testing.assert_equal(self.sess.run(glyw1xw2b2), glyw1xw2b2_expected_result)
-        np.testing.assert_equal(self.sess.run(glxw3), glxw3_expected_result)
-        np.testing.assert_equal(self.sess.run(glzw4b3), glzw4b3_expected_result)
+        np.testing.assert_equal(glxw1.eval(), glxw1_expected_result)
+        np.testing.assert_equal(glxw1yw2b1.eval(), glxw1yw2b1_expected_result)
+        np.testing.assert_equal(glyw1xw2b2.eval(), glyw1xw2b2_expected_result)
+        np.testing.assert_equal(glxw3.eval(), glxw3_expected_result)
+        np.testing.assert_equal(glzw4b3.eval(), glzw4b3_expected_result)
 
 
 # print node information for graph or GraphLSTMNet g
