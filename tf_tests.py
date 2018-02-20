@@ -25,6 +25,26 @@ class DummyFixedTfCell(rci.RNNCell):
         #return inputs, (inputs, inputs)
         return self._h, (self._m, self._h)
 
+class DummyReturnTfCell(rci.RNNCell):
+    def __init__(self, num_units, state_is_tuple=True, return_sum_of_neighbour_states=False):
+        if not state_is_tuple:
+            raise NotImplementedError("DummyFixedTfCell is only defined for state_is_tuple=True")
+        super(DummyReturnTfCell, self).__init__()
+        self._num_units = num_units
+        self._return_sum_of_neighbour_states = return_sum_of_neighbour_states
+
+    @property
+    def state_size(self):
+        return self._num_units, self._num_units
+
+    @property
+    def output_size(self):
+        return self._num_units
+
+    def call(self, inputs, state, neighbour_states=None):
+        if self._return_sum_of_neighbour_states:
+            state = tf.add_n([m for m, h in neighbour_states]), tf.add_n([h for m, h in neighbour_states])
+        return inputs, tuple(x+1 for x in state)
 
 
 def main(*argv):
@@ -75,9 +95,10 @@ def main(*argv):
 
     gr = nx.Graph()
     gr.add_node("test")
-    dftcell1 = DummyFixedTfCell(num_units=2)
+    dftcell1 = DummyFixedTfCell(num_units=1)
+    drtcell1 = DummyReturnTfCell(num_units=3)
 
-    input_data = tf.placeholder(tf.float32, [None, None, 2])
+    input_data = tf.placeholder(tf.float32, [None, None, 3])
 
     sess.run(tf.global_variables_initializer())
     print sess.run({'result': result})
@@ -87,7 +108,9 @@ def main(*argv):
     print xy3
     print np.array_equal(r["*"], r["multiply"])
 
-    print sess.run(tf.nn.dynamic_rnn(dftcell1, input_data, dtype=tf.float32), feed_dict={input_data: [[[1, 2]]]})
+    print sess.run(tf.nn.dynamic_rnn(dftcell1, input_data, dtype=tf.float32), feed_dict={input_data: [[[1, 5, 6]]]})
+    print sess.run(tf.nn.dynamic_rnn(drtcell1, input_data, dtype=tf.float32), feed_dict={input_data: [[[1, 19, 3], [1, 19, 3]]]})
+    print sess.run(tf.nn.dynamic_rnn(drtcell1, input_data, dtype=tf.float32), feed_dict={input_data: [[[1, 19, 3]]]})
 
 
 class LSM(unittest.TestCase):

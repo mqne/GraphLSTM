@@ -488,7 +488,7 @@ class GraphLSTMCell(RNNCell):
             `[batch_size x self.state_size]`, if `state_is_tuple` has been set to
             `True`.  Otherwise, a `Tensor` shaped
             `[batch_size x 2 * self.state_size]`.
-          neighbour_states: a list of the neighbouring nodes' states
+          neighbour_states: a list of n `LSTMStateTuples` of state tensors (m_j, h_j)
 
         Returns:
           A pair containing the new hidden state, and the new state (either a

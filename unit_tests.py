@@ -78,13 +78,16 @@ class DummyReturnCell(orig_rci.RNNCell):
         return (inputs, state, neighbour_states), (neighbour_states, state, inputs)
 
 
-# cell that always returns inputs  # todo: make results to include state and neighbour_states too?
+# cell that always returns inputs and state or sum of neighbour states
 class DummyReturnTfCell(orig_rci.RNNCell):
-    def __init__(self, num_units, state_is_tuple=True):
+    def __init__(self, num_units, state_is_tuple=True, return_sum_of_neighbour_states=False,
+                 add_one_to_state_per_timestep=False):
         if not state_is_tuple:
             raise NotImplementedError("DummyFixedTfCell is only defined for state_is_tuple=True")
         super(DummyReturnTfCell, self).__init__()
         self._num_units = num_units
+        self._return_sum_of_neighbour_states = return_sum_of_neighbour_states
+        self._add_one = add_one_to_state_per_timestep
 
     @property
     def state_size(self):
@@ -95,7 +98,11 @@ class DummyReturnTfCell(orig_rci.RNNCell):
         return self._num_units
 
     def call(self, inputs, state, neighbour_states):
-        return inputs, (inputs, inputs)
+        if self._return_sum_of_neighbour_states:
+            state = tf.add_n([m for m, h in neighbour_states]), tf.add_n([h for m, h in neighbour_states])
+        elif self._add_one:
+            state = tuple(x+1 for x in state)
+        return inputs, state
 
 
 class TestGraphLSTMNet(unittest.TestCase):
