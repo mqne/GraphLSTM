@@ -166,15 +166,38 @@ class TestGraphLSTMNet(unittest.TestCase):
         self.assertRaises(IndexError, unet.call, ([cell_input]), ((cell_state_m, cell_state_h),))
 
     def test_call_uninodal_tf(self):
+        # set up net
         net, cell_name = self.get_uninodal_graphlstmnet()
+
+        # init cells
+        # constant return value 1-dim
         constant_cell_1 = DummyFixedTfCell()
+        # m = [[1,2,3]], h=[[4,5,6]] (batch size 1, state size 3)
+        constant_cell_2 = DummyFixedTfCell(num_units=3, memory_state=((1., 2., 3.),), hidden_state=((4., 5., 6.),))
+        # m = [[1,2],[3,4],[5,6]], h=[[7,8],[9,10],[11,12]] (batch size 3, state size 2)
+        constant_cell_3 = DummyFixedTfCell(num_units=2, memory_state=((1., 2.), (3., 4.), (5., 6.)),
+                                           hidden_state=((7., 8.), (9., 10.), (11., 12.)))
+        # simple return cell, 1 unit
+        return_cell_1 = DummyReturnTfCell(1)
+        # 1 unit, increase state by 1 each time step
+        return_cell_2 = DummyReturnTfCell(1, add_one_to_state_per_timestep=True)
+        # simple return cell, 2 units
+        return_cell_3 = DummyReturnTfCell(2)
+        # 3 units, increase state by 1 each time step
+        return_cell_4 = DummyReturnTfCell(3, add_one_to_state_per_timestep=True)
+
+        # inject first cell into graph
         net._graph.node[cell_name][_CELL] = constant_cell_1
 
         # dimensions: batch_size, max_time, ... (cell dimensions, e.g. for GraphLSTMCell: input_size
-        input = tf.placeholder(tf.float32, [None, None, None])
+        input_data = tf.placeholder(tf.float32, [None, None, None])
 
+        tf.global_variables_initializer().run()
 
-    def get_uninodal_graphlstmnet(self, cell_name="node0", confidence=0):
+        tf.nn.dynamic_rnn(net, input_data)
+
+    @staticmethod
+    def get_uninodal_graphlstmnet(cell_name="node0", confidence=0):
         graph = nx.Graph()
         graph.add_node(cell_name)
         net = rci.GraphLSTMNet(graph)

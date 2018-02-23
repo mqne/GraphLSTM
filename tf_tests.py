@@ -108,7 +108,7 @@ def main(*argv):
     print xy3
     print np.array_equal(r["*"], r["multiply"])
 
-    print sess.run(tf.nn.dynamic_rnn(dftcell1, input_data, dtype=tf.float32), feed_dict={input_data: [[[1, 5, 6]]]})
+    print sess.run(tf.nn.dynamic_rnn(dftcell1, input_data, initial_state=tf.ones([2,3])), feed_dict={input_data: [[[1, 5, 6]]]})
     print sess.run(tf.nn.dynamic_rnn(drtcell1, input_data, dtype=tf.float32), feed_dict={input_data: [[[1, 19, 3], [1, 19, 3]]]})
     print sess.run(tf.nn.dynamic_rnn(drtcell1, input_data, dtype=tf.float32), feed_dict={input_data: [[[1, 19, 3]]]})
 
