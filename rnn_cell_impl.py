@@ -692,18 +692,18 @@ class GraphLSTMNet(RNNCell):
           graph: The graph from which the node will be extracted. Defaults to self._graph .
         """
         if graph is None:
-            graph = self._graph
+            graph = self._nxgraph
         elif not isinstance(graph, nx.classes.graph.Graph):
             raise TypeError(
                 "graph must be a Graph of package networkx, but saw: %s." % graph)
 
         return graph.node[node][_CELL]
 
-    def __init__(self, graph, state_is_tuple=True, name=None):
+    def __init__(self, nxgraph, state_is_tuple=True, name=None):
         """Create a Graph LSTM Network composed of a graph of GraphLSTMCells.
 
         Args:
-          graph: networkx.Graph containing GraphLSTMCells
+          nxgraph: networkx.Graph containing GraphLSTMCells
           state_is_tuple: If True, accepted and returned states are n-tuples, where
             `n = len(cells)`.  If False, the states are all
             concatenated along the column axis.  This latter behavior will soon be
@@ -714,37 +714,37 @@ class GraphLSTMNet(RNNCell):
             returns a state tuple but the flag `state_is_tuple` is `False`.
         """
         super(GraphLSTMNet, self).__init__(name=name)
-        if not graph:
+        if not nxgraph:
             raise ValueError("Must specify graph for GraphLSTMNet.")
-        if not isinstance(graph, nx.classes.graph.Graph):
+        if not isinstance(nxgraph, nx.classes.graph.Graph):
             raise TypeError(
-                "graph must be a Graph of package networkx, but saw: %s." % graph)
+                "graph must be a Graph of package networkx, but saw: %s." % nxgraph)
 
-        self._graph = graph
+        self._nxgraph = nxgraph
         self._state_is_tuple = state_is_tuple
         if not state_is_tuple:
-            if any(nest.is_sequence(self._cell(n).state_size) for n in self._graph):
+            if any(nest.is_sequence(self._cell(n).state_size) for n in self._nxgraph):
                 raise ValueError("Some cells return tuples of states, but the flag "
                                  "state_is_tuple is not set.  State sizes are: %s"
-                                 % str([self._cell(n).state_size for n in self._graph]))
+                                 % str([self._cell(n).state_size for n in self._nxgraph]))
 
         # TODO init weights (W*, U*, U*n, b*) here for global weights
 
     @property
     def state_size(self):
         if self._state_is_tuple:
-            return tuple(self._cell(n).state_size for n in self._graph)
+            return tuple(self._cell(n).state_size for n in self._nxgraph)
         else:
-            return sum([self._cell(n).state_size for n in self._graph])
+            return sum([self._cell(n).state_size for n in self._nxgraph])
 
     @property
     def output_size(self):
-        return sum(self._cell(n).output_size for n in self._graph)
+        return sum(self._cell(n).output_size for n in self._nxgraph)
 
     def zero_state(self, batch_size, dtype):
         with ops.name_scope(type(self).__name__ + "ZeroState", values=[batch_size]):
             if self._state_is_tuple:
-                return tuple(self._cell(n).zero_state(batch_size, dtype) for n in self._graph)
+                return tuple(self._cell(n).zero_state(batch_size, dtype) for n in self._nxgraph)
             else:
                 # We know here that state_size of each cell is not a tuple and
                 # presumably does not contain TensorArrays or anything else fancy
@@ -759,9 +759,9 @@ class GraphLSTMNet(RNNCell):
         """
 
         # check if input size matches expected size
-        if len(inputs) is not self._graph.number_of_nodes():
+        if len(inputs) is not self._nxgraph.number_of_nodes():
             raise ValueError("Number of nodes in GraphLSTMNet input %d does not match number of graph nodes %d" %
-                             (len(inputs), self._graph.number_of_nodes()))
+                             (len(inputs), self._nxgraph.number_of_nodes()))
 
         # check how _linear() gets its tf variables (generation vs. reusing)
         # and use that knowledge for U and other variables
@@ -771,11 +771,11 @@ class GraphLSTMNet(RNNCell):
         # ^this is for global Ufn local Un, which is NOT in the original paper! Paper: everything is global
         # TODO: all weights global, tf.AUTO_REUSE in cell? init all weights in net?
 
-        new_states = [None] * self._graph.number_of_nodes()
-        graph_output = [None] * self._graph.number_of_nodes()
+        new_states = [None] * self._nxgraph.number_of_nodes()
+        graph_output = [None] * self._nxgraph.number_of_nodes()
 
         # iterate over cells in graph, starting with highest confidence value
-        for node_name, node_obj in sorted(self._graph.nodes(data=True), key=lambda x: x[1][_CONFIDENCE], reverse=True):
+        for node_name, node_obj in sorted(self._nxgraph.nodes(data=True), key=lambda x: x[1][_CONFIDENCE], reverse=True):
             # TODO variable scope to include graphLSTM name/instance-id/or similar
             with vs.variable_scope("cell_%s" % node_name):  # TODO: variable scope here? in other places?
                 # extract GraphLSTMCell object from graph node
@@ -796,7 +796,7 @@ class GraphLSTMNet(RNNCell):
 
                 # extract and collect states of neighbouring cells
                 neighbour_states_array = []
-                for neighbour_name, neighbour_obj in nx.all_neighbors(self._graph, node_name):
+                for neighbour_name, neighbour_obj in nx.all_neighbors(self._nxgraph, node_name):
                     n_i = neighbour_obj[_INDEX]
                     # use updated state if node has been visited
                     # TODO: think about giving old _and_ new states to node for 100% paper fidelity

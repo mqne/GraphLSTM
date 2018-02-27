@@ -132,11 +132,11 @@ class TestGraphLSTMNet(unittest.TestCase):
         # ... or existing node without a cell
         self.assertRaises(KeyError, self.gnet._cell, "wrist")
         # Check if return values for existing cells are right
-        self.gnet._graph.node["wrist"]["cell"] = 123
+        self.gnet._nxgraph.node["wrist"]["cell"] = 123
         self.assertEqual(self.gnet._cell("wrist"), 123)
         glcell = rci.GraphLSTMCell
         b = glcell(1)
-        self.gnet._graph.node["t0"]["cell"] = b
+        self.gnet._nxgraph.node["t0"]["cell"] = b
         self.assertIs(self.gnet._cell("t0"), b)
         b = glcell(1)
         self.assertIsNot(self.gnet._cell("t0"), b)
@@ -147,14 +147,14 @@ class TestGraphLSTMNet(unittest.TestCase):
         unet, cname = self.get_uninodal_graphlstmnet()
 
         # test correct returning of cell return value
-        unet._graph.node[cname][_CELL] = DummyFixedCell((cell_cur_output, cell_new_state)).call
+        unet._nxgraph.node[cname][_CELL] = DummyFixedCell((cell_cur_output, cell_new_state)).call
         net_output = unet.call(([cell_input]), ((cell_state_m, cell_state_h),))
         expected = ((cell_cur_output,), (cell_new_state,))
         self.assertEqual(net_output, expected, msg="GraphLSTNet.call() did not return expected objects. "
                                                    "There is probably an error in GraphLSTMNet AFTER calling the cell.")
 
         # test correct delivering of parameters to cell
-        unet._graph.node[cname][_CELL] = DummyReturnCell().call
+        unet._nxgraph.node[cname][_CELL] = DummyReturnCell().call
         net_output = unet.call(([cell_input]), ((cell_state_m, cell_state_h),))
         expected = (((cell_input, (cell_state_m, cell_state_h), tuple()),),
                     ((tuple(), (cell_state_m, cell_state_h), cell_input),))
@@ -162,7 +162,7 @@ class TestGraphLSTMNet(unittest.TestCase):
                                                    "There is probably an error in GraphLSTMNet BEFORE calling the cell.")
 
         # check proper index handling: uninodal GraphLSTM should complain about indices > 0
-        unet._graph.node[cname][_INDEX] = 1
+        unet._nxgraph.node[cname][_INDEX] = 1
         self.assertRaises(IndexError, unet.call, ([cell_input]), ((cell_state_m, cell_state_h),))
 
     def test_call_uninodal_tf(self):
@@ -187,22 +187,24 @@ class TestGraphLSTMNet(unittest.TestCase):
         return_cell_4 = DummyReturnTfCell(3, add_one_to_state_per_timestep=True)
 
         # inject first cell into graph
-        net._graph.node[cell_name][_CELL] = constant_cell_1
+        net._nxgraph.node[cell_name][_CELL] = constant_cell_1
 
         # dimensions: batch_size, max_time, ... (cell dimensions, e.g. for GraphLSTMCell: input_size
-        input_data = tf.placeholder(tf.float32, [None, None, None])
+        input_data_1 = tf.placeholder(tf.float32, [None, None, 1])
+        input_data_2 = tf.placeholder(tf.float32, [None, None, 2])
+        input_data_3 = tf.placeholder(tf.float32, [None, None, 3])
 
         tf.global_variables_initializer().run()
 
-        tf.nn.dynamic_rnn(net, input_data)
+        tf.nn.dynamic_rnn(net, input_data_1, dtype=tf.float32).run(feed_dict={input_data_1: [[[6]]]})
 
     @staticmethod
     def get_uninodal_graphlstmnet(cell_name="node0", confidence=0):
         graph = nx.Graph()
         graph.add_node(cell_name)
         net = rci.GraphLSTMNet(graph)
-        net._graph.node[cell_name][_CONFIDENCE] = confidence
-        net._graph.node[cell_name][_INDEX] = 0
+        net._nxgraph.node[cell_name][_CONFIDENCE] = confidence
+        net._nxgraph.node[cell_name][_INDEX] = 0
         return net, cell_name
 
 
@@ -277,7 +279,7 @@ class TestGraphLSTMLinear(unittest.TestCase):
 def print_node(name, g):
     if isinstance(g, rci.GraphLSTMNet):
         print "Node information for GraphLSTMNet %s:" % str(g)
-        g = g._graph
+        g = g._nxgraph
     else:
         print "Node information for graph %s:" % str(g)
     print "graph[\"%s\"]: %s" % (name, str(g[name]))
