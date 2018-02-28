@@ -56,7 +56,9 @@ class DummyFixedTfCell(orig_rci.RNNCell):
         return self._num_units
 
     def call(self, inputs, state, neighbour_states):
-        return self._h, (self._m, self._h)
+        scope = tf.get_variable_scope()
+        with tf.variable_scope(scope) as outer_scope:
+            return self._h, (self._m, self._h)
 
 
 # cell that always returns inputs, state, and neighbour_states on call()
@@ -105,17 +107,12 @@ class DummyReturnTfCell(orig_rci.RNNCell):
         return inputs, state
 
 
-class TestGraphLSTMNet(unittest.TestCase):
+class TestGraphLSTMNet(tf.test.TestCase):
 
     def setUp(self):
         self.longMessage = True
         self.G = nx.Graph(_kickoff_hand)
-        self.gnet = rci.GraphLSTMNet(self.G)
-        self.sess = tf.InteractiveSession()
-
-    def tearDown(self):
-        self.sess.close()
-        tf.reset_default_graph()
+        self.gnet = rci.GraphLSTMNet(self.G, name="unittest_setup_gnet")
 
     def test_init(self):
         # GraphLSTMNet should complain when initiated with something else than a nx.Graph
@@ -141,6 +138,8 @@ class TestGraphLSTMNet(unittest.TestCase):
         b = glcell(1)
         self.assertIsNot(self.gnet._cell("t0"), b)
 
+    @unittest.skip("'inputs' is a tensor when called by tensorflow. Threw no errors as of 2018-02-27,"
+                   "maybe implement with tensor-input later")
     def test_call_uninodal_notf(self):
         cell_input, cell_state_m, cell_state_h, cell_cur_output, cell_new_state = objects(5)
 
@@ -189,14 +188,18 @@ class TestGraphLSTMNet(unittest.TestCase):
         # inject first cell into graph
         net._nxgraph.node[cell_name][_CELL] = constant_cell_1
 
-        # dimensions: batch_size, max_time, ... (cell dimensions, e.g. for GraphLSTMCell: input_size
-        input_data_1 = tf.placeholder(tf.float32, [None, None, 1])
+        # dimensions: batch_size, max_time, [cell dimensions] e.g. for
+        #   GraphLSTMCell: input_size
+        #   GraphLSTMNet: cell_count, input_size
+        input_data_1 = tf.placeholder(tf.float32, [5, 78, 1, 4])
         input_data_2 = tf.placeholder(tf.float32, [None, None, 2])
         input_data_3 = tf.placeholder(tf.float32, [None, None, 3])
 
-        tf.global_variables_initializer().run()
+        with self.test_session():
+            tf.global_variables_initializer().run()
 
-        tf.nn.dynamic_rnn(net, input_data_1, dtype=tf.float32).run(feed_dict={input_data_1: [[[6]]]})
+            tf.nn.dynamic_rnn(net, input_data_1, dtype=tf.float32).run(feed_dict={input_data_1: [[[6]]]})
+            # tf.nn.dynamic_rnn(orig_rci.MultiRNNCell([constant_cell_1]), input_data_1, dtype=tf.float32).run(feed_dict={input_data_1: [[[6]]]})
 
     @staticmethod
     def get_uninodal_graphlstmnet(cell_name="node0", confidence=0):
@@ -208,21 +211,16 @@ class TestGraphLSTMNet(unittest.TestCase):
         return net, cell_name
 
 
-class TestGraphLSTMLinear(unittest.TestCase):
+class TestGraphLSTMLinear(tf.test.TestCase):
 
     def setUp(self):
         self.longMessage = True
         self.func = rci._graphlstm_linear
 
-        self.sess = tf.InteractiveSession()
         self.x = tf.constant([[1., 2.], [3., 4.]])
         self.y = tf.constant([[5., 6.], [7., 8.]])
         self.z = tf.constant([[0., 1.], [2., 3.], [4., 5.]])
         self.custom_initializer_1 = tf.constant_initializer([[0, -1], [2, 1]])
-
-    def tearDown(self):
-        self.sess.close()
-        tf.reset_default_graph()
 
     def test_errors(self):
         self.assertRaisesRegexp(ValueError, "args", self.func, ['_'], [], 1, True)
@@ -266,13 +264,14 @@ class TestGraphLSTMLinear(unittest.TestCase):
                             bias_initializer=tf.ones_initializer)
         glzw4b3_expected_result = [[2, 2, 2, 2], [6, 6, 6, 6], [10, 10, 10, 10]]
 
-        tf.global_variables_initializer().run()
+        with self.test_session():
+            tf.global_variables_initializer().run()
 
-        np.testing.assert_equal(glxw1.eval(), glxw1_expected_result)
-        np.testing.assert_equal(glxw1yw2b1.eval(), glxw1yw2b1_expected_result)
-        np.testing.assert_equal(glyw1xw2b2.eval(), glyw1xw2b2_expected_result)
-        np.testing.assert_equal(glxw3.eval(), glxw3_expected_result)
-        np.testing.assert_equal(glzw4b3.eval(), glzw4b3_expected_result)
+            np.testing.assert_equal(glxw1.eval(), glxw1_expected_result)
+            np.testing.assert_equal(glxw1yw2b1.eval(), glxw1yw2b1_expected_result)
+            np.testing.assert_equal(glyw1xw2b2.eval(), glyw1xw2b2_expected_result)
+            np.testing.assert_equal(glxw3.eval(), glxw3_expected_result)
+            np.testing.assert_equal(glzw4b3.eval(), glzw4b3_expected_result)
 
 
 # print node information for graph or GraphLSTMNet g
@@ -299,9 +298,9 @@ def dirty_tests():
 
 
 def main():
-    # test_call_uninodal_GraphLSTMNet_tf()
     dirty_tests()
-    unittest.main()
+    with tf.variable_scope("unittest"):
+        unittest.main()
 
 
 main()

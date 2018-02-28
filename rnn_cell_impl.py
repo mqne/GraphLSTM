@@ -758,10 +758,20 @@ class GraphLSTMNet(RNNCell):
           state: a tuple or tensor of states for each node
         """
 
+        # check if input dimensions match expectation todo: test this
+        if len(inputs.shape) != 3:
+            raise ValueError("Input shape mismatch: expected tensor of 3 dimensions "
+                             "(batch_size, cell_count, input_size), but saw %i: "
+                             "%s" % (len(inputs.shape), inputs.shape))
+        if inputs.shape[-2] != self._nxgraph.number_of_nodes():
+            raise ValueError("Number of nodes in GraphLSTMNet input (%d) does not match number of graph nodes (%d)" %
+                             (inputs.shape[-2], self._nxgraph.number_of_nodes()))
+
+        # DEPRECATED: 'inputs' is not a tuple but a tensor
         # check if input size matches expected size
-        if len(inputs) is not self._nxgraph.number_of_nodes():
-            raise ValueError("Number of nodes in GraphLSTMNet input %d does not match number of graph nodes %d" %
-                             (len(inputs), self._nxgraph.number_of_nodes()))
+        #if len(inputs) is not self._nxgraph.number_of_nodes():
+        #    raise ValueError("Number of nodes in GraphLSTMNet input %d does not match number of graph nodes %d" %
+        #                     (len(inputs), self._nxgraph.number_of_nodes()))
 
         # check how _linear() gets its tf variables (generation vs. reusing)
         # and use that knowledge for U and other variables
@@ -814,6 +824,8 @@ class GraphLSTMNet(RNNCell):
                 # extract input of current cell from input tuple
                 cur_inp = inputs[i]
                 # run current cell
+                # ATTENTION: signature of cell.call, when called by tf, gets inherited from superclass,
+                # resulting in signature (inputs, state, scope=None) !!! todo: how to pass neighbour_states?
                 cur_output, new_state = cell(cur_inp, cur_state, neighbour_states)
                 # store cell output and state in graph vector
                 graph_output[i] = cur_output
