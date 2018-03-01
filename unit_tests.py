@@ -55,7 +55,13 @@ class DummyFixedTfCell(orig_rci.RNNCell):
     def output_size(self):
         return self._num_units
 
-    def call(self, inputs, state, neighbour_states):
+    # get neighbour_states from net without embedding it in the state itself
+    def __call__(self, inputs, state, neighbour_states, *args, **kwargs):
+        self._neighbour_states = neighbour_states
+        return super(DummyFixedTfCell, self).__call__(inputs, state, *args, **kwargs)
+
+    def call(self, inputs, state):
+        # print "We are in call, this is len(self._neighbour_states): %s" % len(self._neighbour_states)
         scope = tf.get_variable_scope()
         with tf.variable_scope(scope) as outer_scope:
             return self._h, (self._m, self._h)
@@ -99,9 +105,14 @@ class DummyReturnTfCell(orig_rci.RNNCell):
     def output_size(self):
         return self._num_units
 
-    def call(self, inputs, state, neighbour_states):
+    # get neighbour_states from net without embedding it in the state itself
+    def __call__(self, inputs, state, neighbour_states, *args, **kwargs):
+        self._neighbour_states = neighbour_states
+        return super(DummyReturnTfCell, self).__call__(inputs, state, *args, **kwargs)
+
+    def call(self, inputs, state):
         if self._return_sum_of_neighbour_states:
-            state = tf.add_n([m for m, h in neighbour_states]), tf.add_n([h for m, h in neighbour_states])
+            state = tf.add_n([m for m, h in self._neighbour_states]), tf.add_n([h for m, h in self._neighbour_states])
         elif self._add_one:
             state = tuple(x+1 for x in state)
         return inputs, state
@@ -191,14 +202,15 @@ class TestGraphLSTMNet(tf.test.TestCase):
         # dimensions: batch_size, max_time, [cell dimensions] e.g. for
         #   GraphLSTMCell: input_size
         #   GraphLSTMNet: cell_count, input_size
-        input_data_1 = tf.placeholder(tf.float32, [5, 78, 1, 4])
+        input_data_1 = tf.placeholder(tf.float32, [1, 1, 1, 4])
         input_data_2 = tf.placeholder(tf.float32, [None, None, 2])
         input_data_3 = tf.placeholder(tf.float32, [None, None, 3])
 
         with self.test_session():
             tf.global_variables_initializer().run()
 
-            tf.nn.dynamic_rnn(net, input_data_1, dtype=tf.float32).run(feed_dict={input_data_1: [[[6]]]})
+            # todo: systematic evaluation ([0]: h, [1][0][1]: h, [1][0][0]: m)
+            print tf.nn.dynamic_rnn(net, input_data_1, dtype=tf.float32)[1][0][0].eval(feed_dict={input_data_1: [[[[6, 5, 4, 3]]]]})
             # tf.nn.dynamic_rnn(orig_rci.MultiRNNCell([constant_cell_1]), input_data_1, dtype=tf.float32).run(feed_dict={input_data_1: [[[6]]]})
 
     @staticmethod

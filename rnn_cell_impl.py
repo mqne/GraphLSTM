@@ -479,8 +479,13 @@ class GraphLSTMCell(RNNCell):
     def output_size(self):
         return self._num_units
 
-    def call(self, inputs, state, neighbour_states):
+    def __call__(self, inputs, state, neighbour_states, *args, **kwargs):
         """Graph long short-term memory cell (GraphLSTM).
+
+        `__call__` is the function called by tensorflow's `dynamic_rnn`.
+        It stores `neighbour_states` in a cell variable and relays the rest
+        to the `__call__` method of the superclass, which in the end will call
+        GraphLSTMNet's `call` method.
 
         Args:
           inputs: `2-D` tensor with shape `[batch_size x input_size]`.
@@ -489,9 +494,30 @@ class GraphLSTMCell(RNNCell):
             `True`.  Otherwise, a `Tensor` shaped
             `[batch_size x 2 * self.state_size]`.
           neighbour_states: a list of n `LSTMStateTuples` of state tensors (m_j, h_j)
+          *args: additional positional arguments to be passed to `self.call`.
+          **kwargs: additional keyword arguments to be passed to `self.call`.
+            **Note**: kwarg `scope` is reserved for use by the layer.
 
         Returns:
-          A pair containing the new hidden state, and the new state (either a
+          A tuple, containing the new hidden state and the new state (either a
+            `LSTMStateTuple` or a concatenated state, depending on
+            `state_is_tuple`).
+        """
+        self._neighbour_states = neighbour_states
+        return super(GraphLSTMCell, self).__call__(inputs, state, *args, **kwargs)
+
+    def call(self, inputs, state):
+        """Graph long short-term memory cell (GraphLSTM).
+
+        Args:
+          inputs: `2-D` tensor with shape `[batch_size x input_size]`.
+          state: An `LSTMStateTuple` of state tensors, each shaped
+            `[batch_size x self.state_size]`, if `state_is_tuple` has been set to
+            `True`.  Otherwise, a `Tensor` shaped
+            `[batch_size x 2 * self.state_size]`.
+
+        Returns:
+          A tuple, containing the new hidden state and the new state (either a
             `LSTMStateTuple` or a concatenated state, depending on
             `state_is_tuple`).
         """
@@ -517,8 +543,13 @@ class GraphLSTMCell(RNNCell):
 
         # TODO: unit tests for GraphLSTMCell.call
 
+        # self._neighbour_states: a list of n `LSTMStateTuples` of state tensors (m_j, h_j)
+        if not hasattr(self, "_neighbour_states"):
+            raise LookupError("Could not find variable 'self._neighbour_states' during 'GraphLSTMCell.call'.\n"
+                              "This likely means 'call' was called directly, instead of through '__call__' (which "
+                              "should be the case when called from inside the tensorflow framework).")
         # extract two vectors of n ms and n hs from state vector of n (m,h) tuples
-        m_j_all, h_j_all = zip(*neighbour_states)
+        m_j_all, h_j_all = zip(*self._neighbour_states)
 
         # IMPLEMENTATION DIFFERS FROM PAPER: in eq. (2) g^f_ij uses h_j,t regardless of if node j has been updated
         # already or not. Implemented here is h_j,t for non-updated nodes and h_j,t+1 for updated nodes
