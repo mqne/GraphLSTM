@@ -181,7 +181,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
         # init cells
         # constant return value 1-dim
         constant_cell_1 = DummyFixedTfCell()
-        # m = [[1,2,3]], h=[[4,5,6]] (batch size 1, state size 3)
+        # m = [[1,2,3]], h=[[4,5,6]] (batch size 1, state size 3) todo from here
         constant_cell_2 = DummyFixedTfCell(num_units=3, memory_state=((1., 2., 3.),), hidden_state=((4., 5., 6.),))
         # m = [[1,2],[3,4],[5,6]], h=[[7,8],[9,10],[11,12]] (batch size 3, state size 2)
         constant_cell_3 = DummyFixedTfCell(num_units=2, memory_state=((1., 2.), (3., 4.), (5., 6.)),
@@ -203,14 +203,23 @@ class TestGraphLSTMNet(tf.test.TestCase):
         #   GraphLSTMNet: cell_count, input_size
 
         # fixed cell 1: 1 unit, input values arbitrary
+
         # input size 4: [1 1 1 4]
         input_data_1 = tf.placeholder(tf.float32, [None, None, 1, 4])
         feed_dict_1 = {input_data_1: [[[[6, 5, 4, 3]]]]}
+        # input_size is ignored by constant cell
+        cc1a_expected_result = [[[3]]], ([[2]], [[3]])
+
         # 1000 timesteps: [1 1000 1 1]
         input_data_1b = tf.placeholder(tf.float32, [None, None, 1, 1])
         feed_dict_1b = {input_data_1b: [[[[932.71002]]] * 1000]}
+        # timesteps are managed by dynamic_rnn
+        cc1b_expected_result = [[[3]] * 1000], ([[2]], [[3]])
+
         # batch size 3: [3 1 1 1]
         feed_dict_1c = {input_data_1b: [[[[4]]], [[[17]]], [[[-9]]]]}
+        # batch_size is ignored by constant cell
+        cc1c_expected_result = [[[3]]], ([[2]], [[3]])
 
         # fixed cell 2
         input_data_2 = tf.placeholder(tf.float32, [None, None, 3, 7])
@@ -224,30 +233,24 @@ class TestGraphLSTMNet(tf.test.TestCase):
             # return value of DummyReturnTfCell: input, state
             # return value of dynamic_rnn: output [batch_size, max_time, cell.output_size], final_state
 
-            cc1_expected_result = [[[3]]], ([[2]], [[3]])
-            cc1b_expected_result = [[[3]]*1000], ([[2]], [[3]])
+            cc1a_returned_tensors = tf.nn.dynamic_rnn(net, input_data_1, dtype=tf.float32)
 
-            cc1_returned_tensors = tf.nn.dynamic_rnn(net, input_data_1, dtype=tf.float32)
+            cc1a_actual_result = cc1a_returned_tensors[0].eval(feed_dict=feed_dict_1), \
+                (cc1a_returned_tensors[1][0][0].eval(feed_dict=feed_dict_1),
+                 cc1a_returned_tensors[1][0][1].eval(feed_dict=feed_dict_1))
+            np.testing.assert_equal(cc1a_actual_result, cc1a_expected_result)
 
-            cc1_actual_result = cc1_returned_tensors[0].eval(feed_dict=feed_dict_1), \
-                (cc1_returned_tensors[1][0][0].eval(feed_dict=feed_dict_1),
-                 cc1_returned_tensors[1][0][1].eval(feed_dict=feed_dict_1))
-            np.testing.assert_equal(cc1_actual_result, cc1_expected_result)
+            cc1bc_returned_tensors = tf.nn.dynamic_rnn(net, input_data_1b, dtype=tf.float32)
 
-            cc1_returned_tensors = tf.nn.dynamic_rnn(net, input_data_1b, dtype=tf.float32)
-
-            cc1b_actual_result = cc1_returned_tensors[0].eval(feed_dict=feed_dict_1b), \
-                (cc1_returned_tensors[1][0][0].eval(feed_dict=feed_dict_1b),
-                 cc1_returned_tensors[1][0][1].eval(feed_dict=feed_dict_1b))
+            cc1b_actual_result = cc1bc_returned_tensors[0].eval(feed_dict=feed_dict_1b), \
+                (cc1bc_returned_tensors[1][0][0].eval(feed_dict=feed_dict_1b),
+                 cc1bc_returned_tensors[1][0][1].eval(feed_dict=feed_dict_1b))
             np.testing.assert_equal(cc1b_actual_result, cc1b_expected_result)
 
-            cc1c_actual_result = cc1_returned_tensors[0].eval(feed_dict=feed_dict_1c), \
-                (cc1_returned_tensors[1][0][0].eval(feed_dict=feed_dict_1c),
-                 cc1_returned_tensors[1][0][1].eval(feed_dict=feed_dict_1c))
-            print "actual result: " + str(cc1c_actual_result)
-            print "returned tensors: " + str(cc1_returned_tensors)
-            # todo this should fail, as expected batch_size of return value is 3 (but is actually 1?)!
-            np.testing.assert_equal(cc1c_actual_result, cc1_expected_result)
+            cc1c_actual_result = cc1bc_returned_tensors[0].eval(feed_dict=feed_dict_1c), \
+                (cc1bc_returned_tensors[1][0][0].eval(feed_dict=feed_dict_1c),
+                 cc1bc_returned_tensors[1][0][1].eval(feed_dict=feed_dict_1c))
+            np.testing.assert_equal(cc1c_actual_result, cc1c_expected_result)
 
     @staticmethod
     def get_uninodal_graphlstmnet(cell_name="node0", confidence=0):
