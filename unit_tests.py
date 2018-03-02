@@ -61,7 +61,6 @@ class DummyFixedTfCell(orig_rci.RNNCell):
         return super(DummyFixedTfCell, self).__call__(inputs, state, *args, **kwargs)
 
     def call(self, inputs, state):
-        # print "We are in call, this is len(self._neighbour_states): %s" % len(self._neighbour_states)
         scope = tf.get_variable_scope()
         with tf.variable_scope(scope) as outer_scope:
             return self._h, (self._m, self._h)
@@ -202,16 +201,53 @@ class TestGraphLSTMNet(tf.test.TestCase):
         # dimensions: batch_size, max_time, [cell dimensions] e.g. for
         #   GraphLSTMCell: input_size
         #   GraphLSTMNet: cell_count, input_size
-        input_data_1 = tf.placeholder(tf.float32, [1, 1, 1, 4])
-        input_data_2 = tf.placeholder(tf.float32, [None, None, 2])
-        input_data_3 = tf.placeholder(tf.float32, [None, None, 3])
+
+        # fixed cell 1: 1 unit, input values arbitrary
+        # input size 4: [1 1 1 4]
+        input_data_1 = tf.placeholder(tf.float32, [None, None, 1, 4])
+        feed_dict_1 = {input_data_1: [[[[6, 5, 4, 3]]]]}
+        # 1000 timesteps: [1 1000 1 1]
+        input_data_1b = tf.placeholder(tf.float32, [None, None, 1, 1])
+        feed_dict_1b = {input_data_1b: [[[[932.71002]]] * 1000]}
+        # batch size 3: [3 1 1 1]
+        feed_dict_1c = {input_data_1b: [[[[4]]], [[[17]]], [[[-9]]]]}
+
+        # fixed cell 2
+        input_data_2 = tf.placeholder(tf.float32, [None, None, 3, 7])
+        input_data_3 = tf.placeholder(tf.float32, [None, None, 2, 110])
 
         with self.test_session():
             tf.global_variables_initializer().run()
 
-            # todo: systematic evaluation ([0]: h, [1][0][1]: h, [1][0][0]: m)
-            print tf.nn.dynamic_rnn(net, input_data_1, dtype=tf.float32)[1][0][0].eval(feed_dict={input_data_1: [[[[6, 5, 4, 3]]]]})
-            # tf.nn.dynamic_rnn(orig_rci.MultiRNNCell([constant_cell_1]), input_data_1, dtype=tf.float32).run(feed_dict={input_data_1: [[[6]]]})
+            # return value of GraphLSTMNet: graph_output, new_states
+            # return value of DummyFixedTfCell: output, (state, output)
+            # return value of DummyReturnTfCell: input, state
+            # return value of dynamic_rnn: output [batch_size, max_time, cell.output_size], final_state
+
+            cc1_expected_result = [[[3]]], ([[2]], [[3]])
+            cc1b_expected_result = [[[3]]*1000], ([[2]], [[3]])
+
+            cc1_returned_tensors = tf.nn.dynamic_rnn(net, input_data_1, dtype=tf.float32)
+
+            cc1_actual_result = cc1_returned_tensors[0].eval(feed_dict=feed_dict_1), \
+                (cc1_returned_tensors[1][0][0].eval(feed_dict=feed_dict_1),
+                 cc1_returned_tensors[1][0][1].eval(feed_dict=feed_dict_1))
+            np.testing.assert_equal(cc1_actual_result, cc1_expected_result)
+
+            cc1_returned_tensors = tf.nn.dynamic_rnn(net, input_data_1b, dtype=tf.float32)
+
+            cc1b_actual_result = cc1_returned_tensors[0].eval(feed_dict=feed_dict_1b), \
+                (cc1_returned_tensors[1][0][0].eval(feed_dict=feed_dict_1b),
+                 cc1_returned_tensors[1][0][1].eval(feed_dict=feed_dict_1b))
+            np.testing.assert_equal(cc1b_actual_result, cc1b_expected_result)
+
+            cc1c_actual_result = cc1_returned_tensors[0].eval(feed_dict=feed_dict_1c), \
+                (cc1_returned_tensors[1][0][0].eval(feed_dict=feed_dict_1c),
+                 cc1_returned_tensors[1][0][1].eval(feed_dict=feed_dict_1c))
+            print "actual result: " + str(cc1c_actual_result)
+            print "returned tensors: " + str(cc1_returned_tensors)
+            # todo this should fail, as expected batch_size of return value is 3 (but is actually 1?)!
+            np.testing.assert_equal(cc1c_actual_result, cc1_expected_result)
 
     @staticmethod
     def get_uninodal_graphlstmnet(cell_name="node0", confidence=0):

@@ -782,11 +782,12 @@ class GraphLSTMNet(RNNCell):
                 return super(GraphLSTMNet, self).zero_state(batch_size, dtype)
 
     def call(self, inputs, state):
-        """Run this multi-layer cell on inputs, starting from state.
+        """Run this Graph LSTM on inputs, starting from state.
 
         Args:
-          inputs: a tuple of inputs for each graph node, where the index must correspond to the node attribute 'index'
-          state: a tuple or tensor of states for each node
+          inputs: A tensor of dimensions [batch_size, number_of_nodes, inputs_size].
+            The index of each node in this tensor must correspond to the node attribute 'index'.
+          state: A tuple or tensor of states for each node.
         """
 
         # check if input dimensions match expectation todo: test this
@@ -798,11 +799,11 @@ class GraphLSTMNet(RNNCell):
             raise ValueError("Number of nodes in GraphLSTMNet input (%d) does not match number of graph nodes (%d)" %
                              (inputs.shape[-2], self._nxgraph.number_of_nodes()))
 
-        # DEPRECATED: 'inputs' is not a tuple but a tensor
-        # check if input size matches expected size
-        #if len(inputs) is not self._nxgraph.number_of_nodes():
-        #    raise ValueError("Number of nodes in GraphLSTMNet input %d does not match number of graph nodes %d" %
-        #                     (len(inputs), self._nxgraph.number_of_nodes()))
+        # # DEPRECATED: 'inputs' is not a tuple but a tensor
+        # # check if input size matches expected size
+        # if len(inputs) is not self._nxgraph.number_of_nodes():
+        #     raise ValueError("Number of nodes in GraphLSTMNet input %d does not match number of graph nodes %d" %
+        #                      (len(inputs), self._nxgraph.number_of_nodes()))
 
         # check how _linear() gets its tf variables (generation vs. reusing)
         # and use that knowledge for U and other variables
@@ -852,11 +853,9 @@ class GraphLSTMNet(RNNCell):
                     neighbour_states_array.append(n_state)
                 # make immutable
                 neighbour_states = tuple(neighbour_states_array)
-                # extract input of current cell from input tuple
-                cur_inp = inputs[i]
+                # extract input of current cell from input tuple todo: figure out why returned batch_size is 1 in test
+                cur_inp = inputs[:, i]
                 # run current cell
-                # ATTENTION: signature of cell.call, when called by tf, gets inherited from superclass,
-                # resulting in signature (inputs, state, scope=None) !!! todo: how to pass neighbour_states?
                 cur_output, new_state = cell(cur_inp, cur_state, neighbour_states)
                 # store cell output and state in graph vector
                 graph_output[i] = cur_output
