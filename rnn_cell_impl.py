@@ -715,41 +715,112 @@ class GraphLSTMNet(RNNCell):
 
     The implementation is work in progress."""
 
-    def _cell(self, node, graph=None):
+    def _cell(self, node, nxgraph=None):
         """Return the GraphLSTMCell belonging to a node.
 
         Args:
-          node: The node whose GraphLSTMCell object will be returned.
-          graph: The graph from which the node will be extracted. Defaults to self._graph .
+          node (any): The node whose GraphLSTMCell object will be returned.
+          nxgraph (networkx.Graph): The graph from which the node will be extracted.
+            Defaults to self._nxgraph .
         """
-        if graph is None:
-            graph = self._nxgraph
-        elif not isinstance(graph, nx.classes.graph.Graph):
+        if nxgraph is None:
+            nxgraph = self._nxgraph
+        elif not isinstance(nxgraph, nx.classes.graph.Graph):
             raise TypeError(
-                "graph must be a Graph of package networkx, but saw: %s." % graph)
+                "nxgraph must be a Graph of package networkx, but saw: %s." % nxgraph)
 
-        return graph.node[node][_CELL]
+        return nxgraph.node[node][_CELL]
+
+    @staticmethod
+    def create_nxgraph(self, list_or_nxgraph):
+        #if isinstance() todo implement this method
+        return 0
+
+    @staticmethod
+    def is_valid_nxgraph(nxgraph, raise_errors=True, ignore_cell_type=False):
+        """Check if a given graph is a valid GraphLSTMNet graph.
+
+                Args:
+                  nxgraph (any): The graph to be checked.
+                  raise_errors (bool): If True, the method raises an error as soon as
+                    a problem is detected.
+                  ignore_cell_type (bool): If True, the graph will not be considered 'bad'
+                    if its cells are not GraphLSTMCells.
+
+                Returns:
+                  True if graph is fine, False otherwise.
+
+                Raises:
+                  TypeError: If something inside the graph (or the graph itself) is of
+                    the wrong type.
+                  ValueError: If graph contains no nodes, or the _INDEX attributes
+                    don't form the expected well-defined list.
+                  LookupError: If a node misses the _CELL, _CONFIDENCE or _INDEX attribute.
+                """
+        try:
+            if not isinstance(nxgraph, nx.classes.graph.Graph):
+                raise TypeError("nxgraph is of type %s, but should be an instance of networkx.classes.graph.Graph"
+                                % str(nxgraph))
+            if nxgraph.number_of_nodes() < 1:
+                raise ValueError("nxgraph needs at least one node")
+            node_attr_lookuperr = None
+            index_list = []
+            for node_name in nxgraph.nodes_iter():
+                if _CELL not in nxgraph.node[node_name]:
+                    node_attr_lookuperr = "_CELL"
+                elif _INDEX not in nxgraph.node[node_name]:
+                    node_attr_lookuperr = "_INDEX"
+                elif _CONFIDENCE not in nxgraph.node[node_name]:
+                    node_attr_lookuperr = "_CONFIDENCE"
+                if node_attr_lookuperr is not None:
+                    raise KeyError("Node '%s' has no attribute %s" % (node_name, node_attr_lookuperr))
+                if not ignore_cell_type:
+                    if not isinstance(nxgraph.node[node_name][_CELL], GraphLSTMCell):
+                        raise TypeError("Cell of node '%s' is not a GraphLSTMCell. "
+                                        "If this is expected, consider running is_valid_nxgraph with "
+                                        "ignore_cell_type=True." % node_name)
+                if not isinstance(nxgraph.node[node_name][_INDEX], int):
+                    raise TypeError("_INDEX attribute should always be an integer, but is not for node '%s'"
+                                    % node_name)
+                else:
+                    index_list.append(nxgraph.node[node_name][_INDEX])
+                if not isinstance(nxgraph.node[node_name][_CONFIDENCE], float):
+                    raise TypeError("_CONFIDENCE attribute should always be float, but is not for node '%s'"
+                                    % node_name)
+            if sorted(index_list) != range(len(index_list)):
+                raise ValueError("The values of all _INDEX attributes have to form a well-sorted list, "
+                                 "starting at 0 and ending at number of nodes - 1.\n"
+                                 "Expected 0 ... %i, but found:\n%s"
+                                 % (len(index_list) - 1, sorted(index_list)))
+            return True
+        finally:
+            if not raise_errors:
+                return False
 
     def __init__(self, nxgraph, state_is_tuple=True, name=None):
         """Create a Graph LSTM Network composed of a graph of GraphLSTMCells.
 
         Args:
-          nxgraph: networkx.Graph containing GraphLSTMCells
+          nxgraph: networkx.Graph containing GraphLSTMCells.
           state_is_tuple: If True, accepted and returned states are n-tuples, where
             `n = len(cells)`.  If False, the states are all
             concatenated along the column axis.  This latter behavior will soon be
             deprecated.
 
         Raises:
-          ValueError: if graph is empty (not allowed), or at least one of the cells
+          ValueError: If nxgraph is not valid, or at least one of the cells
             returns a state tuple but the flag `state_is_tuple` is `False`.
         """
         super(GraphLSTMNet, self).__init__(name=name)
         if not nxgraph:
-            raise ValueError("Must specify graph for GraphLSTMNet.")
+            raise ValueError("Must specify nxgraph for GraphLSTMNet.")
         if not isinstance(nxgraph, nx.classes.graph.Graph):
-            raise TypeError(
-                "graph must be a Graph of package networkx, but saw: %s." % nxgraph)
+            nxgraph = self._create_nxgraph(nxgraph)
+        # check if graph is valid, raise errors if not
+        try:
+            self.is_valid_nxgraph(nxgraph)
+        except (TypeError, ValueError, KeyError) as e:
+            raise ValueError("Invalid nxgraph specified for GraphLSTMNet") from e
 
         self._nxgraph = nxgraph
         self._state_is_tuple = state_is_tuple

@@ -61,7 +61,7 @@ def main(*argv):
     b = tf.reduce_mean(z, axis=[0])
     #x += y
     #x += y
-    #print sess.run(x)
+    #print(sess.run(x))
 
     #with tf.variable_scope("scope_tests_m") as outer_scope:
     #    z = rci._linear([x,y],4,False)
@@ -78,16 +78,16 @@ def main(*argv):
     #m = rci._linear(y, 10, False)
 
     scope = "test_scope"
-    with tf.variable_scope(scope) as outer_scope:
-        w = tf.convert_to_tensor([[0, 1], [1, 0]], name="w")
-        x = tf.convert_to_tensor([[3, 2]], name="x")
-        with tf.variable_scope(outer_scope, reuse=tf.AUTO_REUSE):
-
-            result = gl("ll", x, 20, bias=False)
-            result2 = gl("ll", x, 20, bias=False)
-    print result
-    print x
-    print x.get_shape()[1]
+    #with tf.variable_scope(scope) as outer_scope:
+    #    w = tf.convert_to_tensor([[0, 1], [1, 0]], name="w")
+    #    x = tf.convert_to_tensor([[3, 2]], name="x")
+    #    with tf.variable_scope(outer_scope, reuse=tf.AUTO_REUSE):
+#
+    #        result = gl("ll", x, 20, bias=False)
+    #        result2 = gl("ll", x, 20, bias=False)
+    #print(result)
+    #print(x)
+    #print(x.get_shape()[1])
 
     xy1 = x1 * y
     xy2 = tf.multiply(x1, y)
@@ -101,17 +101,18 @@ def main(*argv):
     input_data = tf.placeholder(tf.float32, [None, None, 3])
 
     sess.run(tf.global_variables_initializer())
-    print sess.run({'result': result})
+    # print(sess.run({'result': result}))
     r = sess.run({"*": xy1, "multiply": xy2, "matmul": xy3})
-    print xy1
-    print xy2
-    print xy3
-    print np.array_equal(r["*"], r["multiply"])
+    print(xy1)
+    print(xy2)
+    print(xy3)
+    print(np.array_equal(r["*"], r["multiply"]))
 
-    #print sess.run(tf.nn.dynamic_rnn(dftcell1, input_data, initial_state=tf.ones([2,3])), feed_dict={input_data: [[[1, 5, 6]]]})
-    print sess.run(tf.nn.dynamic_rnn(drtcell1, input_data, dtype=tf.float32), feed_dict={input_data: [[[1, 19, 3], [1, 19, 3]]]})
-    print sess.run(tf.nn.dynamic_rnn(drtcell1, input_data, dtype=tf.float32), feed_dict={input_data: [[[1, 19, 3]]]})
+    #print(sess.run(tf.nn.dynamic_rnn(dftcell1, input_data, initial_state=tf.ones([2,3])), feed_dict={input_data: [[[1, 5, 6]]]}))
+    print(sess.run(tf.nn.dynamic_rnn(drtcell1, input_data, dtype=tf.float32), feed_dict={input_data: [[[1, 19, 3], [1, 19, 3]]]}))
+    print(sess.run(tf.nn.dynamic_rnn(drtcell1, input_data, dtype=tf.float32), feed_dict={input_data: [[[1, 19, 3]]]}))
 
+    print(rci.GraphLSTMNet.is_valid_nxgraph(nx.Graph(), raise_errors=False))
 
 class LSM(unittest.TestCase):
     def setUp(self):

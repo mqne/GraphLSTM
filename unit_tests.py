@@ -123,6 +123,8 @@ class TestGraphLSTMNet(tf.test.TestCase):
         self.longMessage = True
         self.G = nx.Graph(_kickoff_hand)
         self.gnet = rci.GraphLSTMNet(self.G, name="unittest_setup_gnet")
+        # todo: use valid nxgraphs for initialisation, then replace with stub (to circumvent validity check in __init__
+        # probably by implementing _create_nxgraph and using that
 
     def test_init(self):
         # GraphLSTMNet should complain when initiated with something else than a nx.Graph
@@ -147,6 +149,15 @@ class TestGraphLSTMNet(tf.test.TestCase):
         self.assertIs(self.gnet._cell("t0"), b)
         b = glcell(1)
         self.assertIsNot(self.gnet._cell("t0"), b)
+
+    def test_create_nxgraph(self):
+        cg = self.gnet.create_nxgraph
+        self.assertRaises(ValueError, cg, None)
+        self.assertRaises(TypeError, cg, "Teststring")
+        self.assertRaises(TypeError, cg, 5)
+        self.assertRaises(ValueError, cg, [])
+        self.assertRaises(KeyError, cg, ["1", "2", "2"])
+
 
     @unittest.skip("'inputs' is a tensor when called by tensorflow. Threw no errors as of 2018-02-27,"
                    "maybe implement with tensor-input later")
@@ -328,12 +339,12 @@ class TestGraphLSTMLinear(tf.test.TestCase):
 # print node information for graph or GraphLSTMNet g
 def print_node(name, g):
     if isinstance(g, rci.GraphLSTMNet):
-        print "Node information for GraphLSTMNet %s:" % str(g)
+        print("Node information for GraphLSTMNet %s:" % str(g))
         g = g._nxgraph
     else:
-        print "Node information for graph %s:" % str(g)
-    print "graph[\"%s\"]: %s" % (name, str(g[name]))
-    print "graph.node[\"%s\"]: %s" % (name, str(g.node[name]))
+        print("Node information for graph %s:" % str(g))
+    print("graph[\"%s\"]: %s" % (name, str(g[name])))
+    print("graph.node[\"%s\"]: %s" % (name, str(g.node[name])))
 
 
 # return tuple of n objects
