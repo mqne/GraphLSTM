@@ -549,7 +549,7 @@ class GraphLSTMCell(RNNCell):
                               "This likely means 'call' was called directly, instead of through '__call__' (which "
                               "should be the case when called from inside the tensorflow framework).")
         # extract two vectors of n ms and n hs from state vector of n (m,h) tuples
-        m_j_all, h_j_all = zip(*self._neighbour_states)
+        m_j_all, h_j_all = list(zip(*self._neighbour_states))
 
         # IMPLEMENTATION DIFFERS FROM PAPER: in eq. (2) g^f_ij uses h_j,t regardless of if node j has been updated
         # already or not. Implemented here is h_j,t for non-updated nodes and h_j,t+1 for updated nodes
@@ -787,7 +787,7 @@ class GraphLSTMNet(RNNCell):
                 if not isinstance(nxgraph.node[node_name][_CONFIDENCE], float):
                     raise TypeError("_CONFIDENCE attribute should always be float, but is not for node '%s'"
                                     % node_name)
-            if sorted(index_list) != range(len(index_list)):
+            if sorted(index_list) != list(range(len(index_list))):
                 raise ValueError("The values of all _INDEX attributes have to form a well-sorted list, "
                                  "starting at 0 and ending at number of nodes - 1.\n"
                                  "Expected 0 ... %i, but found:\n%s"
@@ -815,7 +815,7 @@ class GraphLSTMNet(RNNCell):
         if not nxgraph:
             raise ValueError("Must specify nxgraph for GraphLSTMNet.")
         if not isinstance(nxgraph, nx.classes.graph.Graph):
-            nxgraph = self._create_nxgraph(nxgraph)
+            nxgraph = self.create_nxgraph(nxgraph)
         # check if graph is valid, raise errors if not
         try:
             self.is_valid_nxgraph(nxgraph)

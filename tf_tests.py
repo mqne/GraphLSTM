@@ -122,8 +122,8 @@ class LSM(unittest.TestCase):
         self.assertTrue(0, msg="oh shit, %s ain't true")
 
     def test_cdf(self):
-        self.assertEqual(0,1)
-        self.assertEqual(0,2)
+        self.assertEqual(0, 1)
+        self.assertEqual(0, 2)
 
 
 main()

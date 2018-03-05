@@ -285,12 +285,12 @@ class TestGraphLSTMLinear(tf.test.TestCase):
         self.custom_initializer_1 = tf.constant_initializer([[0, -1], [2, 1]])
 
     def test_errors(self):
-        self.assertRaisesRegexp(ValueError, "args", self.func, ['_'], [], 1, True)
-        self.assertRaisesRegexp(ValueError, "weight_names", self.func, [], ['_'], 1, True)
-        self.assertRaisesRegexp(ValueError, "True.*one element longer", self.func, ['1', '2'], ['1', '2'], 1, True)
-        self.assertRaisesRegexp(ValueError, "False.*same length", self.func, ['1', '2'], ['1'], 1, False)
-        self.assertRaisesRegexp(LookupError, "`reuse_weights`", self.func, ['1', '2'], ['3', '4'], 1, False,
-                                reuse_weights=['3'])
+        self.assertRaisesRegex(ValueError, "args", self.func, ['_'], [], 1, True)
+        self.assertRaisesRegex(ValueError, "weight_names", self.func, [], ['_'], 1, True)
+        self.assertRaisesRegex(ValueError, "True.*one element longer", self.func, ['1', '2'], ['1', '2'], 1, True)
+        self.assertRaisesRegex(ValueError, "False.*same length", self.func, ['1', '2'], ['1'], 1, False)
+        self.assertRaisesRegex(LookupError, "`reuse_weights`", self.func, ['1', '2'], ['3', '4'], 1, False,
+                               reuse_weights=['3'])
 
     def test_calc(self):
         w1 = "weight_name_1"
@@ -306,9 +306,9 @@ class TestGraphLSTMLinear(tf.test.TestCase):
         glxw1 = self.func([w1], self.x, 2, False, weight_initializer=tf.ones_initializer)
         glxw1_expected_result = [[3, 3], [7, 7]]
         # existing variable should throw error when fetched without reuse
-        self.assertRaisesRegexp(ValueError, "already exists", self.func, w1, self.x, 2, False)
+        self.assertRaisesRegex(ValueError, "already exists", self.func, w1, self.x, 2, False)
         # new variable should throw error when fetched with reuse
-        self.assertRaisesRegexp(ValueError, "does not exist", self.func, n, self.x, 2, False, reuse_weights=n)
+        self.assertRaisesRegex(ValueError, "does not exist", self.func, n, self.x, 2, False, reuse_weights=n)
         # x * w1 + y * w2 (0 -1,2 1) + b1 (0 0)
         glxw1yw2b1 = self.func([w1, w2, b1], [self.x, self.y], 2, True, weight_initializer=self.custom_initializer_1,
                                reuse_weights=[w1])
@@ -350,7 +350,7 @@ def print_node(name, g):
 # return tuple of n objects
 def objects(n):
     r = []
-    for _ in xrange(n):
+    for _ in range(n):
         r.append(object())
     return tuple(r)
 
