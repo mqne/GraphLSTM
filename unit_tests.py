@@ -136,27 +136,50 @@ class TestGraphLSTMNet(tf.test.TestCase):
         self.assertRaises(TypeError, rci.GraphLSTMNet)
 
     def test__cell(self):
+        test_node = "test_node"
+        self.gnet._nxgraph.add_node(test_node)
         # GraphLSTMNet._cell should complain when asked for non-existent node ...
         self.assertRaises(KeyError, self.gnet._cell, "_")
         # ... or existing node without a cell
-        self.assertRaises(KeyError, self.gnet._cell, "wrist")
+        self.assertRaises(KeyError, self.gnet._cell, test_node)
         # Check if return values for existing cells are right
-        self.gnet._nxgraph.node["wrist"]["cell"] = 123
-        self.assertEqual(self.gnet._cell("wrist"), 123)
+        self.gnet._nxgraph.node[test_node][_CELL] = 123
+        self.assertEqual(self.gnet._cell(test_node), 123)
         glcell = rci.GraphLSTMCell
         b = glcell(1)
-        self.gnet._nxgraph.node["t0"]["cell"] = b
+        self.gnet._nxgraph.node["t0"][_CELL] = b
         self.assertIs(self.gnet._cell("t0"), b)
         b = glcell(1)
         self.assertIsNot(self.gnet._cell("t0"), b)
+        self.assertIsInstance(self.gnet._cell("wrist"), rci.GraphLSTMCell)
 
     def test_create_nxgraph(self):
+        # template for creating graph a-b-c
+        v_template = [("c", "b"), ("b", "a")]
+        # the method to be tested
         cg = self.gnet.create_nxgraph
+
+        # invalid graphs
         self.assertRaises(ValueError, cg, None)
         self.assertRaises(TypeError, cg, "Teststring")
         self.assertRaises(TypeError, cg, 5)
         self.assertRaises(ValueError, cg, [])
         self.assertRaises(TypeError, cg, ["1", "2", "2"])
+
+        # valid graph, but invalid keywords
+        # num_units < 1
+        self.assertRaises(ValueError, cg, v_template, 0)
+        # num_units must be int
+        self.assertRaises(TypeError, cg, v_template, 1.0)
+        self.assertRaises(TypeError, cg, v_template, "one")
+        # confidence_dict must be a dict
+        self.assertRaises(TypeError, cg, v_template, 1, confidence_dict=False)
+        # confidence_dict may not contain invalid node names
+        self.assertRaises(KeyError, cg, v_template, 1, confidence_dict={"z": 1})
+        # confidence_dict may not contain invalid confidence values
+        self.assertRaises(ValueError, cg, v_template, 1, confidence_dict={"a": "A"})
+        # todo test **kwargs
+
 
     @unittest.skip("'inputs' is a tensor when called by tensorflow. Threw no errors as of 2018-02-27,"
                    "maybe implement with tensor-input later")

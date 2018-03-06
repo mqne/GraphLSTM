@@ -781,7 +781,7 @@ class GraphLSTMNet(RNNCell):
             if _CONFIDENCE not in node_dict:
                 nxgraph.node[node_name][_CONFIDENCE] = 0.
         # register index
-        for index, node_name in enumerate(sorted(list_or_nxgraph) if not is_sorted else list_or_nxgraph):
+        for index, node_name in enumerate(sorted(nxgraph) if not is_sorted else nxgraph):
             nxgraph.node[node_name][_INDEX] = index
         # register cells
         num_units_type_checked_flag = False
