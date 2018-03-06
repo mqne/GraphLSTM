@@ -54,7 +54,7 @@ def main():
     #     print("params['name']: " + str(params['name']))
 
     # confidences = nx.get_node_attributes(G, "confidence")
-    for c in list(nx.get_node_attributes(G, "confidence").values()):
+    for c in nx.get_node_attributes(G, "confidence").values():
         print(c)
 
 

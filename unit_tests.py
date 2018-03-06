@@ -122,9 +122,9 @@ class TestGraphLSTMNet(tf.test.TestCase):
     def setUp(self):
         self.longMessage = True
         self.G = nx.Graph(_kickoff_hand)
-        self.gnet = rci.GraphLSTMNet(self.G, name="unittest_setup_gnet")
+        self.gnet = rci.GraphLSTMNet(self.G, num_units=1, name="unittest_setup_gnet")
         # todo: use valid nxgraphs for initialisation, then replace with stub (to circumvent validity check in __init__
-        # probably by implementing _create_nxgraph and using that
+        # probably by implementing create_nxgraph and using that
 
     def test_init(self):
         # GraphLSTMNet should complain when initiated with something else than a nx.Graph
@@ -156,8 +156,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
         self.assertRaises(TypeError, cg, "Teststring")
         self.assertRaises(TypeError, cg, 5)
         self.assertRaises(ValueError, cg, [])
-        self.assertRaises(KeyError, cg, ["1", "2", "2"])
-
+        self.assertRaises(TypeError, cg, ["1", "2", "2"])
 
     @unittest.skip("'inputs' is a tensor when called by tensorflow. Threw no errors as of 2018-02-27,"
                    "maybe implement with tensor-input later")
@@ -267,9 +266,8 @@ class TestGraphLSTMNet(tf.test.TestCase):
     def get_uninodal_graphlstmnet(cell_name="node0", confidence=0):
         graph = nx.Graph()
         graph.add_node(cell_name)
-        net = rci.GraphLSTMNet(graph)
-        net._nxgraph.node[cell_name][_CONFIDENCE] = confidence
-        net._nxgraph.node[cell_name][_INDEX] = 0
+        nxgraph = rci.GraphLSTMNet.create_nxgraph(graph, 1, confidence_dict={cell_name: confidence})
+        net = rci.GraphLSTMNet(nxgraph)
         return net, cell_name
 
 
