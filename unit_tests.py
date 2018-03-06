@@ -354,7 +354,10 @@ def objects(n):
 
 
 def dirty_tests():
-    pass
+    G = nx.Graph()
+    G.add_node("a", {_CELL: "heyho"})
+    g = rci.GraphLSTMNet.create_nxgraph(G, ignore_cell_type=True)
+    rci.GraphLSTMNet.is_valid_nxgraph(g, ignore_cell_type=True)
 
 
 def main():

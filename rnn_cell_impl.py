@@ -801,7 +801,7 @@ class GraphLSTMNet(RNNCell):
         if verify and not GraphLSTMNet.is_valid_nxgraph(nxgraph, raise_errors=False, ignore_cell_type=ignore_cell_type):
             import warnings
             warnings.warn("Created nxgraph did not pass validity test. "
-                          "For details, run GraphLSTMNet.is_valid_nxgraph explicitly.", stacklevel=1)
+                          "For details, run GraphLSTMNet.is_valid_nxgraph explicitly.")
         return nxgraph
 
     @staticmethod
@@ -860,10 +860,12 @@ class GraphLSTMNet(RNNCell):
                                  "starting at 0 and ending at number of nodes - 1.\n"
                                  "Expected 0 ... %i, but found:\n%s"
                                  % (len(index_list) - 1, sorted(index_list)))
+        except (TypeError, ValueError, KeyError):
+            if raise_errors:
+                raise
+            return False
+        else:
             return True
-        finally:
-            if not raise_errors:
-                return False
 
     def __init__(self, nxgraph, num_units=None, state_is_tuple=True, name=None):
         """Create a Graph LSTM Network composed of a graph of GraphLSTMCells.
