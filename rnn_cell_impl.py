@@ -799,9 +799,8 @@ class GraphLSTMNet(RNNCell):
                     num_units_type_checked_flag = True
                 nxgraph.node[node_name][_CELL] = GraphLSTMCell(num_units, **graphlstmcell_kwargs)
         if verify and not GraphLSTMNet.is_valid_nxgraph(nxgraph, raise_errors=False, ignore_cell_type=ignore_cell_type):
-            import warnings
-            warnings.warn("Created nxgraph did not pass validity test. "
-                          "For details, run GraphLSTMNet.is_valid_nxgraph explicitly.")
+            logging.warn("Created nxgraph did not pass validity test. "
+                         "For details, run GraphLSTMNet.is_valid_nxgraph explicitly.")
         return nxgraph
 
     @staticmethod

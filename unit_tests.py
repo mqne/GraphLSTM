@@ -123,7 +123,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
         self.longMessage = True
         self.G = nx.Graph(_kickoff_hand)
         self.gnet = rci.GraphLSTMNet(self.G, num_units=1, name="unittest_setup_gnet")
-        # todo: use valid nxgraphs for initialisation, then replace with stub (to circumvent validity check in __init__
+        # todo: use valid nxgraphs for initialisation, then replace with stub (to circumvent validity check in __init__)
         # probably by implementing create_nxgraph and using that
 
     def test_init(self):
@@ -178,8 +178,31 @@ class TestGraphLSTMNet(tf.test.TestCase):
         self.assertRaises(KeyError, cg, v_template, 1, confidence_dict={"z": 1})
         # confidence_dict may not contain invalid confidence values
         self.assertRaises(ValueError, cg, v_template, 1, confidence_dict={"a": "A"})
-        # todo test **kwargs
 
+        # valid graph, valid keywords
+        v_graph = cg(v_template, 6, confidence_dict={"a": .3, "c": -500})
+        self.assertIs(v_graph.number_of_nodes(), 3)
+        self.assertIs(v_graph.number_of_edges(), 2)
+        self.assertEqual(sorted(v_graph.nodes()), sorted(['a', 'b', 'c']))
+        for n in ['a', 'b', 'c']:
+            self.assertEqual(v_graph.node[n].keys(), {_CONFIDENCE, _INDEX, _CELL})
+        self.assertEqual(v_graph.node['a'][_CONFIDENCE], .3)
+        self.assertEqual(v_graph.node['b'][_CONFIDENCE], 0)
+        self.assertEqual(v_graph.node['c'][_CONFIDENCE], -500)
+        self.assertEqual(v_graph.node['a'][_INDEX], 0)
+        self.assertEqual(v_graph.node['b'][_INDEX], 1)
+        self.assertEqual(v_graph.node['c'][_INDEX], 2)
+        for n in ['a', 'b', 'c']:
+            self.assertEqual(v_graph.node[n][_CELL].output_size, 6)
+
+        # **kwargs
+        # invalid keyword
+        self.assertRaises(TypeError, cg, v_template, 6, invalid_keyword=99)
+        # valid keywords
+        v_graph = cg(v_template, 6, forget_bias=99, activation="xyz")
+        for n in ['a', 'b', 'c']:
+            self.assertEqual(v_graph.node[n][_CELL]._forget_bias, 99)
+            self.assertEqual(v_graph.node[n][_CELL]._activation, "xyz")
 
     @unittest.skip("'inputs' is a tensor when called by tensorflow. Threw no errors as of 2018-02-27,"
                    "maybe implement with tensor-input later")
