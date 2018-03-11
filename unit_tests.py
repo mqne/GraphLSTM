@@ -239,8 +239,8 @@ class TestGraphLSTMNet(tf.test.TestCase):
         # m = [[1,2],[3,4],[5,6]], h=[[7,8],[9,10],[11,12]] (batch size 3, state size 2)
         constant_cell_2 = DummyFixedTfCell(num_units=2, memory_state=((1., 2.), (3., 4.), (5., 6.)),
                                            hidden_state=((7., 8.), (9., 10.), (11., 12.)))
-        # simple return cell, 1 unit
-        return_cell_1 = DummyReturnTfCell(1)
+        # simple return cell, 4 units
+        return_cell_1 = DummyReturnTfCell(4)
         # 1 unit, increase state by 1 each time step
         return_cell_2 = DummyReturnTfCell(1, add_one_to_state_per_timestep=True)
         # simple return cell, 2 units
@@ -255,8 +255,8 @@ class TestGraphLSTMNet(tf.test.TestCase):
         # fixed cell 1: 1 unit, input values arbitrary
 
         # input size 4: [1 1 1 4]
-        input_data_cc1a = tf.placeholder(tf.float32, [None, None, 1, 4])
-        feed_dict_cc1a = {input_data_cc1a: [[[[6, 5, 4, 3]]]]}
+        input_data_xc1 = tf.placeholder(tf.float32, [None, None, 1, 4])
+        feed_dict_xc1a = {input_data_xc1: [[[[6, 5, 4, 3]]]]}
         # input_size is ignored by constant cell
         cc1a_expected_result = [[[3]]], ([[2]], [[3]])
 
@@ -282,6 +282,14 @@ class TestGraphLSTMNet(tf.test.TestCase):
 
         # return cell 1: 1 unit
 
+        # input size 4: [1 1 1 4] (unmodified state -> zero-state)
+        rc1a_expected_result = [[[-6, -5, -4, -3]]], ([[0, 0, 0, 0]], [[0, 0, 0, 0]])
+
+        # 1000 timesteps, input size 4: [1 1000 1 4]
+        rc1b_input_values = np.random.rand(1, 1000, 1, 4)
+        feed_dict_rc1b = {input_data_xc1: rc1b_input_values}
+        rc1b_expected_result = -np.squeeze(rc1b_input_values, 2), ([[0, 0, 0, 0]], [[0, 0, 0, 0]])
+
         with self.test_session():
             tf.global_variables_initializer().run()
 
@@ -295,14 +303,14 @@ class TestGraphLSTMNet(tf.test.TestCase):
             msg = "Calling GraphLSTNet with dummy cells did not return expected values. " \
                   "This could mean there is an error in GraphLSTMNet AFTER calling the cell."
 
-            # inject first cell into graph
+            # inject first fixed-cell into graph
             net._nxgraph.node[cell_name][_CELL] = constant_cell_1
 
-            cc1a_returned_tensors = tf.nn.dynamic_rnn(net, input_data_cc1a, dtype=tf.float32)
+            cc1a_returned_tensors = tf.nn.dynamic_rnn(net, input_data_xc1, dtype=tf.float32)
 
-            cc1a_actual_result = cc1a_returned_tensors[0].eval(feed_dict=feed_dict_cc1a), \
-                (cc1a_returned_tensors[1][0][0].eval(feed_dict=feed_dict_cc1a),
-                 cc1a_returned_tensors[1][0][1].eval(feed_dict=feed_dict_cc1a))
+            cc1a_actual_result = cc1a_returned_tensors[0].eval(feed_dict=feed_dict_xc1a), \
+                (cc1a_returned_tensors[1][0][0].eval(feed_dict=feed_dict_xc1a),
+                 cc1a_returned_tensors[1][0][1].eval(feed_dict=feed_dict_xc1a))
             np.testing.assert_equal(cc1a_actual_result, cc1a_expected_result, err_msg=msg)
 
             cc1bc_returned_tensors = tf.nn.dynamic_rnn(net, input_data_cc1b, dtype=tf.float32)
@@ -317,7 +325,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
                  cc1bc_returned_tensors[1][0][1].eval(feed_dict=feed_dict_cc1c))
             np.testing.assert_equal(cc1c_actual_result, cc1c_expected_result, err_msg=msg)
 
-            # inject second cell into graph
+            # inject second fixed-cell into graph
             net._nxgraph.node[cell_name][_CELL] = constant_cell_2
 
             cc2_returned_tensor = tf.nn.dynamic_rnn(net, input_data_cc2, dtype=tf.float32)
@@ -326,6 +334,26 @@ class TestGraphLSTMNet(tf.test.TestCase):
                                 (cc2_returned_tensor[1][0][0].eval(feed_dict=feed_dict_cc2),
                                  cc2_returned_tensor[1][0][1].eval(feed_dict=feed_dict_cc2))
             np.testing.assert_equal(cc2_actual_result, cc2_expected_result, err_msg=msg)
+
+            # if tests containing DummyReturnTfCells fail, while those containing DummyFixedTfCells
+            # do not, this might mean there are problems in GraphLSTMNet BEFORE calling the cell
+            msg = "Calling GraphLSTNet with return cells did not return expected values. " \
+                  "This could mean there is an error in GraphLSTMNet BEFORE calling the cell."
+
+            # inject first return-cell into graph
+            net._nxgraph.node[cell_name][_CELL] = return_cell_1
+
+            rc1_returned_tensor = tf.nn.dynamic_rnn(net, input_data_xc1, dtype=tf.float32)
+            rc1a_actual_result = rc1_returned_tensor[0].eval(feed_dict=feed_dict_xc1a), \
+                                (rc1_returned_tensor[1][0][0].eval(feed_dict=feed_dict_xc1a),
+                                 rc1_returned_tensor[1][0][1].eval(feed_dict=feed_dict_xc1a))
+            np.testing.assert_equal(rc1a_actual_result, rc1a_expected_result, err_msg=msg)
+
+            rc1b_actual_result = rc1_returned_tensor[0].eval(feed_dict=feed_dict_rc1b), \
+                                 (rc1_returned_tensor[1][0][0].eval(feed_dict=feed_dict_rc1b),
+                                  rc1_returned_tensor[1][0][1].eval(feed_dict=feed_dict_rc1b))
+            np.testing.assert_allclose(rc1b_actual_result[0], rc1b_expected_result[0], err_msg=msg)
+            np.testing.assert_equal(rc1b_actual_result[1:], rc1b_expected_result[1:], err_msg=msg)
 
     @staticmethod
     def get_uninodal_graphlstmnet(cell_name="node0", confidence=0):
