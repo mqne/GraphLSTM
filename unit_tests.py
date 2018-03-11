@@ -237,10 +237,8 @@ class TestGraphLSTMNet(tf.test.TestCase):
         # init cells
         # constant return value 1-dim
         constant_cell_1 = DummyFixedTfCell()
-        # m = [[1,2,3]], h=[[4,5,6]] (batch size 1, state size 3) todo from here
-        constant_cell_2 = DummyFixedTfCell(num_units=3, memory_state=((1., 2., 3.),), hidden_state=((4., 5., 6.),))
         # m = [[1,2],[3,4],[5,6]], h=[[7,8],[9,10],[11,12]] (batch size 3, state size 2)
-        constant_cell_3 = DummyFixedTfCell(num_units=2, memory_state=((1., 2.), (3., 4.), (5., 6.)),
+        constant_cell_2 = DummyFixedTfCell(num_units=2, memory_state=((1., 2.), (3., 4.), (5., 6.)),
                                            hidden_state=((7., 8.), (9., 10.), (11., 12.)))
         # simple return cell, 1 unit
         return_cell_1 = DummyReturnTfCell(1)
@@ -251,9 +249,6 @@ class TestGraphLSTMNet(tf.test.TestCase):
         # 3 units, increase state by 1 each time step
         return_cell_4 = DummyReturnTfCell(3, add_one_to_state_per_timestep=True)
 
-        # inject first cell into graph
-        net._nxgraph.node[cell_name][_CELL] = constant_cell_1
-
         # dimensions: batch_size, max_time, [cell dimensions] e.g. for
         #   GraphLSTMCell: input_size
         #   GraphLSTMNet: cell_count, input_size
@@ -261,25 +256,30 @@ class TestGraphLSTMNet(tf.test.TestCase):
         # fixed cell 1: 1 unit, input values arbitrary
 
         # input size 4: [1 1 1 4]
-        input_data_1 = tf.placeholder(tf.float32, [None, None, 1, 4])
-        feed_dict_1 = {input_data_1: [[[[6, 5, 4, 3]]]]}
+        input_data_cc1a = tf.placeholder(tf.float32, [None, None, 1, 4])
+        feed_dict_cc1a = {input_data_cc1a: [[[[6, 5, 4, 3]]]]}
         # input_size is ignored by constant cell
         cc1a_expected_result = [[[3]]], ([[2]], [[3]])
 
         # 1000 timesteps: [1 1000 1 1]
-        input_data_1b = tf.placeholder(tf.float32, [None, None, 1, 1])
-        feed_dict_1b = {input_data_1b: [[[[932.71002]]] * 1000]}
+        input_data_cc1b = tf.placeholder(tf.float32, [None, None, 1, 1])
+        feed_dict_cc1b = {input_data_cc1b: np.random.rand(1, 1000, 1, 1)}
         # timesteps are managed by dynamic_rnn
         cc1b_expected_result = [[[3]] * 1000], ([[2]], [[3]])
 
         # batch size 3: [3 1 1 1]
-        feed_dict_1c = {input_data_1b: [[[[4]]], [[[17]]], [[[-9]]]]}
+        feed_dict_cc1c = {input_data_cc1b: [[[[4]]], [[[17]]], [[[-9]]]]}
         # batch_size is ignored by constant cell
         cc1c_expected_result = [[[3]]], ([[2]], [[3]])
 
-        # fixed cell 2
-        input_data_2 = tf.placeholder(tf.float32, [None, None, 3, 7])
-        input_data_3 = tf.placeholder(tf.float32, [None, None, 2, 110])
+        # fixed cell 2: 3 units, input values arbitrary
+
+        # batch size 3, 4 timesteps, input size 5
+        input_data_cc2 = tf.placeholder(tf.float32, [None, None, 1, 5])
+        feed_dict_cc2 = {
+            input_data_cc2: np.random.rand(3, 4, 1, 5)}
+        cc2_h = [[7,8],[9,10],[11,12]]
+        cc2_expected_result = [[[7,8]]*4,[[9,10]]*4,[[11,12]]*4], ([[1,2],[3,4],[5,6]], cc2_h)
 
         with self.test_session():
             tf.global_variables_initializer().run()
@@ -289,24 +289,42 @@ class TestGraphLSTMNet(tf.test.TestCase):
             # return value of DummyReturnTfCell: input, state
             # return value of dynamic_rnn: output [batch_size, max_time, cell.output_size], final_state
 
-            cc1a_returned_tensors = tf.nn.dynamic_rnn(net, input_data_1, dtype=tf.float32)
+            # if tests containing DummyFixedTfCells fail, this might mean there are problems in GraphLSTMNet
+            # AFTER calling the cell
+            msg = "Calling GraphLSTNet with dummy cells did not return expected values. " \
+                  "This could mean there is an error in GraphLSTMNet AFTER calling the cell."
 
-            cc1a_actual_result = cc1a_returned_tensors[0].eval(feed_dict=feed_dict_1), \
-                (cc1a_returned_tensors[1][0][0].eval(feed_dict=feed_dict_1),
-                 cc1a_returned_tensors[1][0][1].eval(feed_dict=feed_dict_1))
-            np.testing.assert_equal(cc1a_actual_result, cc1a_expected_result)
+            # inject first cell into graph
+            net._nxgraph.node[cell_name][_CELL] = constant_cell_1
 
-            cc1bc_returned_tensors = tf.nn.dynamic_rnn(net, input_data_1b, dtype=tf.float32)
+            cc1a_returned_tensors = tf.nn.dynamic_rnn(net, input_data_cc1a, dtype=tf.float32)
 
-            cc1b_actual_result = cc1bc_returned_tensors[0].eval(feed_dict=feed_dict_1b), \
-                (cc1bc_returned_tensors[1][0][0].eval(feed_dict=feed_dict_1b),
-                 cc1bc_returned_tensors[1][0][1].eval(feed_dict=feed_dict_1b))
-            np.testing.assert_equal(cc1b_actual_result, cc1b_expected_result)
+            cc1a_actual_result = cc1a_returned_tensors[0].eval(feed_dict=feed_dict_cc1a), \
+                (cc1a_returned_tensors[1][0][0].eval(feed_dict=feed_dict_cc1a),
+                 cc1a_returned_tensors[1][0][1].eval(feed_dict=feed_dict_cc1a))
+            np.testing.assert_equal(cc1a_actual_result, cc1a_expected_result, err_msg=msg)
 
-            cc1c_actual_result = cc1bc_returned_tensors[0].eval(feed_dict=feed_dict_1c), \
-                (cc1bc_returned_tensors[1][0][0].eval(feed_dict=feed_dict_1c),
-                 cc1bc_returned_tensors[1][0][1].eval(feed_dict=feed_dict_1c))
-            np.testing.assert_equal(cc1c_actual_result, cc1c_expected_result)
+            cc1bc_returned_tensors = tf.nn.dynamic_rnn(net, input_data_cc1b, dtype=tf.float32)
+
+            cc1b_actual_result = cc1bc_returned_tensors[0].eval(feed_dict=feed_dict_cc1b), \
+                (cc1bc_returned_tensors[1][0][0].eval(feed_dict=feed_dict_cc1b),
+                 cc1bc_returned_tensors[1][0][1].eval(feed_dict=feed_dict_cc1b))
+            np.testing.assert_equal(cc1b_actual_result, cc1b_expected_result, err_msg=msg)
+
+            cc1c_actual_result = cc1bc_returned_tensors[0].eval(feed_dict=feed_dict_cc1c), \
+                (cc1bc_returned_tensors[1][0][0].eval(feed_dict=feed_dict_cc1c),
+                 cc1bc_returned_tensors[1][0][1].eval(feed_dict=feed_dict_cc1c))
+            np.testing.assert_equal(cc1c_actual_result, cc1c_expected_result, err_msg=msg)
+
+            # inject second cell into graph
+            net._nxgraph.node[cell_name][_CELL] = constant_cell_2
+
+            cc2_returned_tensor = tf.nn.dynamic_rnn(net, input_data_cc2, dtype=tf.float32)
+
+            cc2_actual_result = cc2_returned_tensor[0].eval(feed_dict=feed_dict_cc2), \
+                                (cc2_returned_tensor[1][0][0].eval(feed_dict=feed_dict_cc2),
+                                 cc2_returned_tensor[1][0][1].eval(feed_dict=feed_dict_cc2))
+            np.testing.assert_equal(cc2_actual_result, cc2_expected_result, err_msg=msg)
 
     @staticmethod
     def get_uninodal_graphlstmnet(cell_name="node0", confidence=0):
