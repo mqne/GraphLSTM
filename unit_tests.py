@@ -85,7 +85,7 @@ class DummyReturnCell(orig_rci.RNNCell):
         return (inputs, state, neighbour_states), (neighbour_states, state, inputs)
 
 
-# cell that always returns inputs and state or sum of neighbour states
+# cell that always returns (-inputs) and state or sum of neighbour states
 class DummyReturnTfCell(orig_rci.RNNCell):
     def __init__(self, num_units, state_is_tuple=True, return_sum_of_neighbour_states=False,
                  add_one_to_state_per_timestep=False):
@@ -104,7 +104,7 @@ class DummyReturnTfCell(orig_rci.RNNCell):
     def output_size(self):
         return self._num_units
 
-    # get neighbour_states from net without embedding it in the state itself
+    # get neighbour_states from net without embedding them in the state itself
     def __call__(self, inputs, state, neighbour_states, *args, **kwargs):
         self._neighbour_states = neighbour_states
         return super(DummyReturnTfCell, self).__call__(inputs, state, *args, **kwargs)
@@ -114,7 +114,7 @@ class DummyReturnTfCell(orig_rci.RNNCell):
             state = tf.add_n([m for m, h in self._neighbour_states]), tf.add_n([h for m, h in self._neighbour_states])
         elif self._add_one:
             state = tuple(x+1 for x in state)
-        return inputs, state
+        return -inputs, state
 
 
 class TestGraphLSTMNet(tf.test.TestCase):
@@ -122,42 +122,12 @@ class TestGraphLSTMNet(tf.test.TestCase):
     def setUp(self):
         self.longMessage = True
         self.G = nx.Graph(_kickoff_hand)
-        self.gnet = rci.GraphLSTMNet(self.G, num_units=1, name="unittest_setup_gnet")
-        # todo: use valid nxgraphs for initialisation, then replace with stub (to circumvent validity check in __init__)
-        # probably by implementing create_nxgraph and using that
-
-    def test_init(self):
-        # GraphLSTMNet should complain when initiated with something else than a nx.Graph
-        # like an int ...
-        self.assertRaises(TypeError, rci.GraphLSTMNet, 3)
-        # ... None ...
-        self.assertRaises(ValueError, rci.GraphLSTMNet, None)
-        # ... or nothing at all
-        self.assertRaises(TypeError, rci.GraphLSTMNet)
-
-    def test__cell(self):
-        test_node = "test_node"
-        self.gnet._nxgraph.add_node(test_node)
-        # GraphLSTMNet._cell should complain when asked for non-existent node ...
-        self.assertRaises(KeyError, self.gnet._cell, "_")
-        # ... or existing node without a cell
-        self.assertRaises(KeyError, self.gnet._cell, test_node)
-        # Check if return values for existing cells are right
-        self.gnet._nxgraph.node[test_node][_CELL] = 123
-        self.assertEqual(self.gnet._cell(test_node), 123)
-        glcell = rci.GraphLSTMCell
-        b = glcell(1)
-        self.gnet._nxgraph.node["t0"][_CELL] = b
-        self.assertIs(self.gnet._cell("t0"), b)
-        b = glcell(1)
-        self.assertIsNot(self.gnet._cell("t0"), b)
-        self.assertIsInstance(self.gnet._cell("wrist"), rci.GraphLSTMCell)
-
+        
     def test_create_nxgraph(self):
         # template for creating graph a-b-c
         v_template = [("c", "b"), ("b", "a")]
         # the method to be tested
-        cg = self.gnet.create_nxgraph
+        cg = rci.GraphLSTMNet.create_nxgraph
 
         # invalid graphs
         self.assertRaises(ValueError, cg, None)
@@ -193,6 +163,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
         self.assertEqual(v_graph.node['b'][_INDEX], 1)
         self.assertEqual(v_graph.node['c'][_INDEX], 2)
         for n in ['a', 'b', 'c']:
+            self.assertIsInstance(v_graph.node[n][_CELL], rci.GraphLSTMCell)
             self.assertEqual(v_graph.node[n][_CELL].output_size, 6)
 
         # **kwargs
@@ -203,6 +174,34 @@ class TestGraphLSTMNet(tf.test.TestCase):
         for n in ['a', 'b', 'c']:
             self.assertEqual(v_graph.node[n][_CELL]._forget_bias, 99)
             self.assertEqual(v_graph.node[n][_CELL]._activation, "xyz")
+            
+    def test_init(self):
+        # GraphLSTMNet should complain when initiated with something else than a nx.Graph
+        # like an int ...
+        self.assertRaises(TypeError, rci.GraphLSTMNet, 3)
+        # ... None ...
+        self.assertRaises(ValueError, rci.GraphLSTMNet, None)
+        # ... or nothing at all
+        self.assertRaises(TypeError, rci.GraphLSTMNet)
+
+    def test__cell(self):
+        test_node = "test_node"
+        gnet = rci.GraphLSTMNet(self.G, num_units=1, name="unittest_setup_gnet")
+        gnet._nxgraph.add_node(test_node)
+        # GraphLSTMNet._cell should complain when asked for non-existent node ...
+        self.assertRaises(KeyError, gnet._cell, "_")
+        # ... or existing node without a cell
+        self.assertRaises(KeyError, gnet._cell, test_node)
+        # Check if return values for existing cells are right
+        gnet._nxgraph.node[test_node][_CELL] = 123
+        self.assertEqual(gnet._cell(test_node), 123)
+        glcell = rci.GraphLSTMCell
+        b = glcell(1)
+        gnet._nxgraph.node["t0"][_CELL] = b
+        self.assertIs(gnet._cell("t0"), b)
+        b = glcell(1)
+        self.assertIsNot(gnet._cell("t0"), b)
+        self.assertIsInstance(gnet._cell("wrist"), rci.GraphLSTMCell)
 
     @unittest.skip("'inputs' is a tensor when called by tensorflow. Threw no errors as of 2018-02-27,"
                    "maybe implement with tensor-input later")
@@ -278,8 +277,10 @@ class TestGraphLSTMNet(tf.test.TestCase):
         input_data_cc2 = tf.placeholder(tf.float32, [None, None, 1, 5])
         feed_dict_cc2 = {
             input_data_cc2: np.random.rand(3, 4, 1, 5)}
-        cc2_h = [[7,8],[9,10],[11,12]]
-        cc2_expected_result = [[[7,8]]*4,[[9,10]]*4,[[11,12]]*4], ([[1,2],[3,4],[5,6]], cc2_h)
+        cc2_expected_result = [[[7, 8]] * 4, [[9, 10]] * 4, [[11, 12]] * 4], \
+                              ([[1, 2], [3, 4], [5, 6]], [[7, 8], [9, 10], [11, 12]])
+
+        # return cell 1: 1 unit
 
         with self.test_session():
             tf.global_variables_initializer().run()

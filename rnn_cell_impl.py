@@ -481,7 +481,7 @@ class GraphLSTMCell(RNNCell):
         return self._num_units
 
     def __call__(self, inputs, state, neighbour_states, *args, **kwargs):
-        """Graph long short-term memory cell (GraphLSTM).
+        """Store neighbour_states as cell variable and call superclass.
 
         `__call__` is the function called by tensorflow's `dynamic_rnn`.
         It stores `neighbour_states` in a cell variable and relays the rest
@@ -508,7 +508,7 @@ class GraphLSTMCell(RNNCell):
         return super(GraphLSTMCell, self).__call__(inputs, state, *args, **kwargs)
 
     def call(self, inputs, state):
-        """Graph long short-term memory cell (GraphLSTM).
+        """Run one step of the GraphLSTM cell.
 
         Args:
           inputs: `2-D` tensor with shape `[batch_size x input_size]`.
