@@ -1,10 +1,11 @@
 import tensorflow as tf
-import rnn_cell_impl as rci
+import graph_lstm as glstm
 import unittest
 import numpy as np
 import networkx as nx
+import tensorflow.python.user_ops.user_ops
 
-class DummyFixedTfCell(rci.RNNCell):
+class DummyFixedTfCell(glstm.RNNCell):
     def __init__(self, num_units=1, memory_state=((2.,),), hidden_state=((3.,),), state_is_tuple=True):
         if not state_is_tuple:
             raise NotImplementedError("DummyFixedTfCell is only defined for state_is_tuple=True")
@@ -25,7 +26,7 @@ class DummyFixedTfCell(rci.RNNCell):
         #return inputs, (inputs, inputs)
         return self._h, (self._m, self._h)
 
-class DummyReturnTfCell(rci.RNNCell):
+class DummyReturnTfCell(glstm.RNNCell):
     def __init__(self, num_units, state_is_tuple=True, return_sum_of_neighbour_states=False):
         if not state_is_tuple:
             raise NotImplementedError("DummyFixedTfCell is only defined for state_is_tuple=True")
@@ -71,7 +72,7 @@ def main(*argv):
     #tf.initialize_all_variables()
     #tf.scope
 
-    gl = rci._graphlstm_linear
+    gl = glstm._graphlstm_linear
     _ = gl("ll", x, 20, bias=False, weight_initializer=tf.constant_initializer([[0, 1], [-1, 1]]))
 
     #l = rci._linear(x, 20, False)
@@ -112,7 +113,7 @@ def main(*argv):
     print(sess.run(tf.nn.dynamic_rnn(drtcell1, input_data, dtype=tf.float32), feed_dict={input_data: [[[1, 19, 3], [1, 19, 3]]]}))
     print(sess.run(tf.nn.dynamic_rnn(drtcell1, input_data, dtype=tf.float32), feed_dict={input_data: [[[1, 19, 3]]]}))
 
-    print(rci.GraphLSTMNet.is_valid_nxgraph(nx.Graph(), raise_errors=False))
+    print(glstm.GraphLSTMNet.is_valid_nxgraph(nx.Graph(), raise_errors=False))
 
 class LSM(unittest.TestCase):
     def setUp(self):

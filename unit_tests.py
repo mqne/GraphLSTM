@@ -1,9 +1,8 @@
-import rnn_cell_impl as rci
+import graph_lstm as glstm
 import networkx as nx
 import tensorflow as tf
 import numpy as np
 from tensorflow.python.ops import rnn_cell_impl as orig_rci
-# TODO what is tensorflow.python.user_ops for?
 import graph as rci_graph
 import unittest
 
@@ -13,9 +12,9 @@ _kickoff_hand = [("t0", "wrist"), ("i0", "wrist"), ("m0", "wrist"), ("r0", "wris
                  ("m0", "m1"), ("m1", "m2"), ("m2", "m3"), ("r0", "r1"), ("r1", "r2"), ("r2", "r3"), ("p0", "p1"),
                  ("p1", "p2"), ("p2", "p3")]
 
-_CELL = rci._CELL
-_INDEX = rci._INDEX
-_CONFIDENCE = rci._CONFIDENCE
+_CELL = glstm._CELL
+_INDEX = glstm._INDEX
+_CONFIDENCE = glstm._CONFIDENCE
 
 
 # cell that always returns fixed value on call()
@@ -127,7 +126,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
         # template for creating graph a-b-c
         v_template = [("c", "b"), ("b", "a")]
         # the method to be tested
-        cg = rci.GraphLSTMNet.create_nxgraph
+        cg = glstm.GraphLSTMNet.create_nxgraph
 
         # invalid graphs
         self.assertRaises(ValueError, cg, None)
@@ -163,7 +162,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
         self.assertEqual(v_graph.node['b'][_INDEX], 1)
         self.assertEqual(v_graph.node['c'][_INDEX], 2)
         for n in ['a', 'b', 'c']:
-            self.assertIsInstance(v_graph.node[n][_CELL], rci.GraphLSTMCell)
+            self.assertIsInstance(v_graph.node[n][_CELL], glstm.GraphLSTMCell)
             self.assertEqual(v_graph.node[n][_CELL].output_size, 6)
 
         # **kwargs
@@ -178,15 +177,15 @@ class TestGraphLSTMNet(tf.test.TestCase):
     def test_init(self):
         # GraphLSTMNet should complain when initiated with something else than a nx.Graph
         # like an int ...
-        self.assertRaises(TypeError, rci.GraphLSTMNet, 3)
+        self.assertRaises(TypeError, glstm.GraphLSTMNet, 3)
         # ... None ...
-        self.assertRaises(ValueError, rci.GraphLSTMNet, None)
+        self.assertRaises(ValueError, glstm.GraphLSTMNet, None)
         # ... or nothing at all
-        self.assertRaises(TypeError, rci.GraphLSTMNet)
+        self.assertRaises(TypeError, glstm.GraphLSTMNet)
 
     def test__cell(self):
         test_node = "test_node"
-        gnet = rci.GraphLSTMNet(self.G, num_units=1, name="unittest_setup_gnet")
+        gnet = glstm.GraphLSTMNet(self.G, num_units=1, name="unittest_setup_gnet")
         gnet._nxgraph.add_node(test_node)
         # GraphLSTMNet._cell should complain when asked for non-existent node ...
         self.assertRaises(KeyError, gnet._cell, "_")
@@ -195,13 +194,13 @@ class TestGraphLSTMNet(tf.test.TestCase):
         # Check if return values for existing cells are right
         gnet._nxgraph.node[test_node][_CELL] = 123
         self.assertEqual(gnet._cell(test_node), 123)
-        glcell = rci.GraphLSTMCell
+        glcell = glstm.GraphLSTMCell
         b = glcell(1)
         gnet._nxgraph.node["t0"][_CELL] = b
         self.assertIs(gnet._cell("t0"), b)
         b = glcell(1)
         self.assertIsNot(gnet._cell("t0"), b)
-        self.assertIsInstance(gnet._cell("wrist"), rci.GraphLSTMCell)
+        self.assertIsInstance(gnet._cell("wrist"), glstm.GraphLSTMCell)
 
     @unittest.skip("'inputs' is a tensor when called by tensorflow. Threw no errors as of 2018-02-27,"
                    "maybe implement with tensor-input later")
@@ -384,8 +383,8 @@ class TestGraphLSTMNet(tf.test.TestCase):
     def get_uninodal_graphlstmnet(cell_name="node0", confidence=0):
         graph = nx.Graph()
         graph.add_node(cell_name)
-        nxgraph = rci.GraphLSTMNet.create_nxgraph(graph, 1, confidence_dict={cell_name: confidence})
-        net = rci.GraphLSTMNet(nxgraph)
+        nxgraph = glstm.GraphLSTMNet.create_nxgraph(graph, 1, confidence_dict={cell_name: confidence})
+        net = glstm.GraphLSTMNet(nxgraph)
         return net, cell_name
 
 
@@ -393,7 +392,7 @@ class TestGraphLSTMLinear(tf.test.TestCase):
 
     def setUp(self):
         self.longMessage = True
-        self.func = rci._graphlstm_linear
+        self.func = glstm._graphlstm_linear
 
         self.x = tf.constant([[1., 2.], [3., 4.]])
         self.y = tf.constant([[5., 6.], [7., 8.]])
@@ -454,7 +453,7 @@ class TestGraphLSTMLinear(tf.test.TestCase):
 
 # print node information for graph or GraphLSTMNet g
 def print_node(name, g):
-    if isinstance(g, rci.GraphLSTMNet):
+    if isinstance(g, glstm.GraphLSTMNet):
         print("Node information for GraphLSTMNet %s:" % str(g))
         g = g._nxgraph
     else:
@@ -474,8 +473,8 @@ def objects(n):
 def dirty_tests():
     G = nx.Graph()
     G.add_node("a", cell="heyho")
-    g = rci.GraphLSTMNet.create_nxgraph(G, ignore_cell_type=True)
-    rci.GraphLSTMNet.is_valid_nxgraph(g, ignore_cell_type=True)
+    g = glstm.GraphLSTMNet.create_nxgraph(G, ignore_cell_type=True)
+    glstm.GraphLSTMNet.is_valid_nxgraph(g, ignore_cell_type=True)
 
 
 def main():
