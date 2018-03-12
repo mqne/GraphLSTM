@@ -730,7 +730,7 @@ class GraphLSTMNet(RNNCell):
             raise TypeError(
                 "nxgraph must be a Graph of package networkx, but saw: %s." % nxgraph)
 
-        return nxgraph.node[node][_CELL]
+        return nxgraph.nodes[node][_CELL]
 
     @staticmethod
     def create_nxgraph(list_or_nxgraph, num_units=None, confidence_dict=None, is_sorted=False, verify=True,
@@ -774,18 +774,18 @@ class GraphLSTMNet(RNNCell):
                 raise TypeError("confidence_dict must be of type 'dict', but found '%s'." % type(confidence_dict))
             for node_name, confidence in confidence_dict.items():
                 try:
-                    nxgraph.node[node_name][_CONFIDENCE] = float(confidence)
+                    nxgraph.nodes[node_name][_CONFIDENCE] = float(confidence)
                 except KeyError as e:
                     raise KeyError("Node '%s' in confidence_dict does not exist in nxgraph." % node_name) from e
-        for node_name, node_dict in nxgraph.nodes_iter(data=True):
+        for node_name, node_dict in nxgraph.nodes(data=True):
             if _CONFIDENCE not in node_dict:
-                nxgraph.node[node_name][_CONFIDENCE] = 0.
+                nxgraph.nodes[node_name][_CONFIDENCE] = 0.
         # register index
         for index, node_name in enumerate(sorted(nxgraph) if not is_sorted else nxgraph):
-            nxgraph.node[node_name][_INDEX] = index
+            nxgraph.nodes[node_name][_INDEX] = index
         # register cells
         num_units_type_checked_flag = False
-        for node_name, node_dict in nxgraph.nodes_iter(data=True):
+        for node_name, node_dict in nxgraph.nodes(data=True):
             if _CELL not in node_dict:
                 if not num_units_type_checked_flag:
                     if num_units is None:
@@ -797,7 +797,7 @@ class GraphLSTMNet(RNNCell):
                     if num_units < 1:
                         raise ValueError("num_units must be a positive integer, but found: %i" % num_units)
                     num_units_type_checked_flag = True
-                nxgraph.node[node_name][_CELL] = GraphLSTMCell(num_units, **graphlstmcell_kwargs)
+                nxgraph.nodes[node_name][_CELL] = GraphLSTMCell(num_units, **graphlstmcell_kwargs)
         if verify and not GraphLSTMNet.is_valid_nxgraph(nxgraph, raise_errors=False, ignore_cell_type=ignore_cell_type):
             logging.warn("Created nxgraph did not pass validity test. "
                          "For details, run GraphLSTMNet.is_valid_nxgraph explicitly.")
@@ -832,26 +832,26 @@ class GraphLSTMNet(RNNCell):
                 raise ValueError("nxgraph needs at least one node.")
             node_attr_lookuperr = None
             index_list = []
-            for node_name in nxgraph.nodes_iter():
-                if _CELL not in nxgraph.node[node_name]:
+            for node_name in nxgraph.nodes:
+                if _CELL not in nxgraph.nodes[node_name]:
                     node_attr_lookuperr = "_CELL"
-                elif _INDEX not in nxgraph.node[node_name]:
+                elif _INDEX not in nxgraph.nodes[node_name]:
                     node_attr_lookuperr = "_INDEX"
-                elif _CONFIDENCE not in nxgraph.node[node_name]:
+                elif _CONFIDENCE not in nxgraph.nodes[node_name]:
                     node_attr_lookuperr = "_CONFIDENCE"
                 if node_attr_lookuperr is not None:
                     raise KeyError("Node '%s' has no attribute %s" % (node_name, node_attr_lookuperr))
                 if not ignore_cell_type:
-                    if not isinstance(nxgraph.node[node_name][_CELL], GraphLSTMCell):
+                    if not isinstance(nxgraph.nodes[node_name][_CELL], GraphLSTMCell):
                         raise TypeError("Cell of node '%s' is not a GraphLSTMCell. "
                                         "If this is expected, consider running is_valid_nxgraph with "
                                         "ignore_cell_type=True." % node_name)
-                if not isinstance(nxgraph.node[node_name][_INDEX], int):
+                if not isinstance(nxgraph.nodes[node_name][_INDEX], int):
                     raise TypeError("_INDEX attribute should always be an integer, but is not for node '%s'"
                                     % node_name)
                 else:
-                    index_list.append(nxgraph.node[node_name][_INDEX])
-                if not isinstance(nxgraph.node[node_name][_CONFIDENCE], float):
+                    index_list.append(nxgraph.nodes[node_name][_INDEX])
+                if not isinstance(nxgraph.nodes[node_name][_CONFIDENCE], float):
                     raise TypeError("_CONFIDENCE attribute should always be float, but is not for node '%s'"
                                     % node_name)
             if sorted(index_list) != list(range(len(index_list))):
