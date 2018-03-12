@@ -1,0 +1,9 @@
+networkx==2.*
+tensorflow
+
+# required for unittests
+numpy
+
+# not necessary, but needed for networkx conversion tests (will result in ImportWarning):
+pandas
+scipy

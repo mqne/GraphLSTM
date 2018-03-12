@@ -241,12 +241,8 @@ class TestGraphLSTMNet(tf.test.TestCase):
                                            hidden_state=((7., 8.), (9., 10.), (11., 12.)))
         # simple return cell, 4 units
         return_cell_1 = DummyReturnTfCell(4)
-        # 1 unit, increase state by 1 each time step
-        return_cell_2 = DummyReturnTfCell(1, add_one_to_state_per_timestep=True)
-        # simple return cell, 2 units
-        return_cell_3 = DummyReturnTfCell(2)
         # 3 units, increase state by 1 each time step
-        return_cell_4 = DummyReturnTfCell(3, add_one_to_state_per_timestep=True)
+        return_cell_2 = DummyReturnTfCell(3, add_one_to_state_per_timestep=True)
 
         # dimensions: batch_size, max_time, [cell dimensions] e.g. for
         #   GraphLSTMCell: input_size
@@ -280,7 +276,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
         cc2_expected_result = [[[7, 8]] * 4, [[9, 10]] * 4, [[11, 12]] * 4], \
                               ([[1, 2], [3, 4], [5, 6]], [[7, 8], [9, 10], [11, 12]])
 
-        # return cell 1: 1 unit
+        # return cell 1: 4 units
 
         # input size 4: [1 1 1 4] (unmodified state -> zero-state)
         rc1a_expected_result = [[[-6, -5, -4, -3]]], ([[0, 0, 0, 0]], [[0, 0, 0, 0]])
@@ -289,6 +285,19 @@ class TestGraphLSTMNet(tf.test.TestCase):
         rc1b_input_values = np.random.rand(1, 1000, 1, 4)
         feed_dict_rc1b = {input_data_xc1: rc1b_input_values}
         rc1b_expected_result = -np.squeeze(rc1b_input_values, 2), ([[0, 0, 0, 0]], [[0, 0, 0, 0]])
+
+        # batch size 3, input size 4: [3 1 1 4]
+        rc1c_input_values = np.random.rand(3, 1, 1, 4)
+        feed_dict_rc1c = {input_data_xc1: rc1c_input_values}
+        rc1c_expected_result = -np.squeeze(rc1c_input_values, 2), ([[0, 0, 0, 0]]*3, [[0, 0, 0, 0]]*3)
+
+        # return cell 2: 3 units, add_one_to_state_per_timestep True
+
+        # batch size 2, 5 timesteps, input size 3:
+        input_data_rc2 = tf.placeholder(tf.float32, [None, None, 1, 3])
+        rc2_input_values = np.random.rand(2, 5, 1, 3)
+        feed_dict_rc2 = {input_data_rc2: rc2_input_values}
+        rc2_expected_result = -np.squeeze(rc2_input_values, 2), ([[5, 5, 5]]*2, [[5, 5, 5]]*2)
 
         with self.test_session():
             tf.global_variables_initializer().run()
@@ -354,6 +363,22 @@ class TestGraphLSTMNet(tf.test.TestCase):
                                   rc1_returned_tensor[1][0][1].eval(feed_dict=feed_dict_rc1b))
             np.testing.assert_allclose(rc1b_actual_result[0], rc1b_expected_result[0], err_msg=msg)
             np.testing.assert_equal(rc1b_actual_result[1:], rc1b_expected_result[1:], err_msg=msg)
+
+            rc1c_actual_result = rc1_returned_tensor[0].eval(feed_dict=feed_dict_rc1c), \
+                                 (rc1_returned_tensor[1][0][0].eval(feed_dict=feed_dict_rc1c),
+                                  rc1_returned_tensor[1][0][1].eval(feed_dict=feed_dict_rc1c))
+            np.testing.assert_allclose(rc1c_actual_result[0], rc1c_expected_result[0], err_msg=msg)
+            np.testing.assert_equal(rc1c_actual_result[1:], rc1c_expected_result[1:], err_msg=msg)
+
+            # inject second return-cell into graph
+            net._nxgraph.node[cell_name][_CELL] = return_cell_2
+
+            rc2_returned_tensor = tf.nn.dynamic_rnn(net, input_data_rc2, dtype=tf.float32)
+            rc2_actual_result = rc2_returned_tensor[0].eval(feed_dict=feed_dict_rc2), \
+                                 (rc2_returned_tensor[1][0][0].eval(feed_dict=feed_dict_rc2),
+                                  rc2_returned_tensor[1][0][1].eval(feed_dict=feed_dict_rc2))
+            np.testing.assert_allclose(rc2_actual_result[0], rc2_expected_result[0], err_msg=msg)
+            np.testing.assert_equal(rc2_actual_result[1:], rc2_expected_result[1:], err_msg=msg)
 
     @staticmethod
     def get_uninodal_graphlstmnet(cell_name="node0", confidence=0):
