@@ -113,7 +113,7 @@ class DummyReturnTfCell(orig_rci.RNNCell):
         if self._return_sum_of_neighbour_states:
             state = tf.add_n([m for m, h in self._neighbour_states]), tf.add_n([h for m, h in self._neighbour_states])
         elif self._add_one:
-            state = tuple(x+1 for x in state)
+            state = tuple(x + 1 for x in state)
         return -inputs, state
 
 
@@ -122,7 +122,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
     def setUp(self):
         self.longMessage = True
         self.G = nx.Graph(_kickoff_hand)
-        
+
     def test_create_nxgraph(self):
         # template for creating graph a-b-c
         v_template = [("c", "b"), ("b", "a")]
@@ -174,7 +174,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
         for n in ['a', 'b', 'c']:
             self.assertEqual(v_graph.node[n][_CELL]._forget_bias, 99)
             self.assertEqual(v_graph.node[n][_CELL]._activation, "xyz")
-            
+
     def test_init(self):
         # GraphLSTMNet should complain when initiated with something else than a nx.Graph
         # like an int ...
@@ -246,7 +246,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
 
         # dimensions: batch_size, max_time, [cell dimensions] e.g. for
         #   GraphLSTMCell: input_size
-        #   GraphLSTMNet: cell_count, input_size
+        #   GraphLSTMNet: number_of_nodes, input_size
 
         # fixed cell 1: 1 unit, input values arbitrary
 
@@ -289,7 +289,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
         # batch size 3, input size 4: [3 1 1 4]
         rc1c_input_values = np.random.rand(3, 1, 1, 4)
         feed_dict_rc1c = {input_data_xc1: rc1c_input_values}
-        rc1c_expected_result = [-np.squeeze(rc1c_input_values, 2)], (([[0, 0, 0, 0]]*3, [[0, 0, 0, 0]]*3),)
+        rc1c_expected_result = [-np.squeeze(rc1c_input_values, 2)], (([[0, 0, 0, 0]] * 3, [[0, 0, 0, 0]] * 3),)
 
         # return cell 2: 3 units, add_one_to_state_per_timestep True
 
@@ -297,7 +297,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
         input_data_rc2 = tf.placeholder(tf.float32, [None, None, 1, 3])
         rc2_input_values = np.random.rand(2, 5, 1, 3)
         feed_dict_rc2 = {input_data_rc2: rc2_input_values}
-        rc2_expected_result = [-np.squeeze(rc2_input_values, 2)], (([[5, 5, 5]]*2, [[5, 5, 5]]*2),)
+        rc2_expected_result = [-np.squeeze(rc2_input_values, 2)], (([[5, 5, 5]] * 2, [[5, 5, 5]] * 2),)
 
         with self.test_session() as sess:
             tf.global_variables_initializer().run()
@@ -392,13 +392,13 @@ class TestGraphLSTMNet(tf.test.TestCase):
 
         # input dimensions: batch_size, max_time, [cell dimensions] e.g. for
         #   GraphLSTMCell: input_size
-        #   GraphLSTMNet: cell_count, input_size
+        #   GraphLSTMNet: number_of_nodes, input_size
 
         # return value of GraphLSTMNet: graph_output, new_states
         # return value of DummyFixedTfCell: output, (state, output)
         # return value of DummyReturnTfCell: input, state
         # return value of dynamic_rnn: output [number_of_nodes, batch_size, max_time, cell.output_size],
-        #   [number_of_nodes, final_state]
+        #   final_state [number_of_nodes, state_size (2 for LSTM), batch_size, output_size]
 
         # fixed cells: 4 cells, 1 unit, input values arbitrary
 
@@ -419,11 +419,44 @@ class TestGraphLSTMNet(tf.test.TestCase):
         input_data_rc = tf.placeholder(tf.float32, [5, 1, 4, 3])
         rc_values = np.random.rand(5, 1, 4, 3)
         feed_dict_rc = {input_data_rc: rc_values}
-        # input_size is ignored by constant cell
-        # state shape: number_of_nodes 4, state_size 2, batch_size 5, output_size 3  todo: maybe write a method for this
-        rc_expected_result = -np.swapaxes(np.swapaxes(rc_values, 0, 2), 1, 2), np.zeros([4, 2, 5, 3])  # and this
+        # state shape: number_of_nodes 4, state_size 2, batch_size 5, output_size 3
+        rc_expected_result = -np.swapaxes(np.swapaxes(rc_values, 0, 2), 1, 2), np.zeros([4, 2, 5, 3])
 
-        # todo: test communication between neighbours
+        # make return cells with inter-neighbour communication
+        # c increases its state by 1 each timestep, starting from 0
+        # a, b and d return the sum of their neighbouring states
+        return_neighbour_cell_a = DummyReturnTfCell(2, return_sum_of_neighbour_states=True)
+        return_neighbour_cell_b = DummyReturnTfCell(2, return_sum_of_neighbour_states=True)
+        return_neighbour_cell_c = DummyReturnTfCell(2, add_one_to_state_per_timestep=True)
+        return_neighbour_cell_d = DummyReturnTfCell(2, return_sum_of_neighbour_states=True)
+
+        # update order: c, d, a, b
+        confidence_dict_cdab = {"c": 1, "d": 0.9, "a": .6, "b": -2}
+        # input size 2, 4 nodes: [? ? 4 2]
+        input_data_rcn_cdab = tf.placeholder(tf.float32, [None, None, 4, 2])
+
+        # time sequence of state values:
+        #   t   a   b   c   d
+        #   1   0   2   1   1
+        #   2   2   8   2   4
+        #   3   8   22  3   11
+        #   4   22  52  4   26
+
+        # batch size 5, 1 timesteps, number_of_nodes 4, input/output size 2: [5 1 4 2]
+        rcn_cdab_t1_values = np.random.rand(5, 1, 4, 2)
+        feed_dict_rcn_cdab_t1 = {input_data_rcn_cdab: rcn_cdab_t1_values}
+        # state shape: number_of_nodes 4, state_size 2, batch_size 5, output_size 3
+        rcn_cdab_t1_expected_output = -np.swapaxes(np.swapaxes(rcn_cdab_t1_values, 0, 2), 1, 2)
+        rcn_cdab_t1_expected_final_state = (
+            np.zeros([2, 5, 2]), np.zeros([2, 5, 2]) + 2, np.ones([2, 5, 2]), np.ones([2, 5, 2]))
+
+        # batch size 2, 4 timesteps, number_of_nodes 4, input/output size 2: [2 4 4 2]
+        rcn_cdab_t4_values = np.random.rand(2, 4, 4, 2)
+        feed_dict_rcn_cdab_t4 = {input_data_rcn_cdab: rcn_cdab_t4_values}
+        # state shape: number_of_nodes 4, state_size 2, batch_size 2, output_size 3
+        rcn_cdab_t4_expected_output = -np.swapaxes(np.swapaxes(rcn_cdab_t4_values, 0, 2), 1, 2)
+        rcn_cdab_t4_expected_final_state = (
+            np.zeros([2, 2, 2]) + 22, np.zeros([2, 2, 2]) + 52, np.zeros([2, 2, 2]) + 4, np.zeros([2, 2, 2]) + 26)
 
         with self.test_session() as sess:
             tf.global_variables_initializer().run()
@@ -464,12 +497,40 @@ class TestGraphLSTMNet(tf.test.TestCase):
 
             self.assertEqual(len(rc_returned_tensors[0]), len(nxgraph),
                              msg="GraphLSTMNet should return %i outputs (equaling number of nodes), but returned %i"
-                             % (len(nxgraph), len(rc_returned_tensors[0])))
+                                 % (len(nxgraph), len(rc_returned_tensors[0])))
 
             rc_actual_result = sess.run(rc_returned_tensors, feed_dict=feed_dict_rc)
 
             np.testing.assert_allclose(rc_actual_result[0], rc_expected_result[0], err_msg=msg)
             np.testing.assert_allclose(rc_actual_result[1], rc_expected_result[1], err_msg=msg)
+
+            # inject neighbour-aware return cells into network graph
+            nxgraph.node['a'][_CELL] = return_neighbour_cell_a
+            nxgraph.node['b'][_CELL] = return_neighbour_cell_b
+            nxgraph.node['c'][_CELL] = return_neighbour_cell_c
+            nxgraph.node['d'][_CELL] = return_neighbour_cell_d
+
+            # inject confidence dict for update order c, d, a, b
+            net._nxgraph = glstm.GraphLSTMNet.create_nxgraph(nxgraph, confidence_dict=confidence_dict_cdab,
+                                                             ignore_cell_type=True)
+
+            rcn_cdab_returned_tensors = tf.nn.dynamic_rnn(net, input_data_rcn_cdab, dtype=tf.float32)
+
+            self.assertEqual(len(rcn_cdab_returned_tensors[0]), len(nxgraph),
+                             msg="GraphLSTMNet should return %i outputs (equaling number of nodes), but returned %i"
+                                 % (len(nxgraph), len(rc_returned_tensors[0])))
+
+            # test batch size 5, 1 timestep
+            rcn_cdab_actual_result = sess.run(rcn_cdab_returned_tensors, feed_dict=feed_dict_rcn_cdab_t1)
+
+            np.testing.assert_allclose(rcn_cdab_actual_result[0], rcn_cdab_t1_expected_output, err_msg=msg)
+            np.testing.assert_allclose(rcn_cdab_actual_result[1], rcn_cdab_t1_expected_final_state, err_msg=msg)
+
+            # test batch size 2, 4 timesteps
+            rcn_cdab_actual_result = sess.run(rcn_cdab_returned_tensors, feed_dict=feed_dict_rcn_cdab_t4)
+
+            np.testing.assert_allclose(rcn_cdab_actual_result[0], rcn_cdab_t4_expected_output, err_msg=msg)
+            np.testing.assert_allclose(rcn_cdab_actual_result[1], rcn_cdab_t4_expected_final_state, err_msg=msg)
 
 
 class TestGraphLSTMLinear(tf.test.TestCase):
