@@ -19,10 +19,6 @@ This module provides the Graph LSTM network, as well as the cell needed therefor
 It also implements the operator needed for the cell's internal calculations.
 Constructing multi-layer networks is supported by calling the network several times.
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import networkx as nx
 
 from tensorflow.python.ops.rnn_cell_impl import LSTMStateTuple, RNNCell
@@ -273,7 +269,7 @@ class GraphLSTMNet(RNNCell):
 
     @staticmethod
     def create_nxgraph(list_or_nxgraph, num_units=None, confidence_dict=None, is_sorted=False, verify=True,
-                       ignore_cell_type=False, **graphlstmcell_kwargs):
+                       ignore_cell_type=False, allow_selfloops=False, **graphlstmcell_kwargs):
         """Return a GraphLSTM Network graph (composed of GraphLSTMCells).
 
         Args:
@@ -291,8 +287,10 @@ class GraphLSTMNet(RNNCell):
           verify (bool): If True (default), the final nxgraph will be checked for
             validity by GraphLSTMNet.is_valid_nxgraph, and a warning will be issued
             in case of failure.
-          ignore_cell_type (bool): If the verification should check the cells' types
-            (default: True).
+          ignore_cell_type (bool): If the verification should ignore the cells' types
+            (default: False).
+          allow_selfloops (bool): If the verification should allow for selfloops
+            in the graph (default: False).
           **graphlstmcell_kwargs: optional keyword arguments that will get passed
             to the GraphLSTMCell constructor.
 
@@ -337,13 +335,14 @@ class GraphLSTMNet(RNNCell):
                         raise ValueError("num_units must be a positive integer, but found: %i" % num_units)
                     num_units_type_checked_flag = True
                 nxgraph.nodes[node_name][_CELL] = GraphLSTMCell(num_units, **graphlstmcell_kwargs)
-        if verify and not GraphLSTMNet.is_valid_nxgraph(nxgraph, raise_errors=False, ignore_cell_type=ignore_cell_type):
+        if verify and not GraphLSTMNet.is_valid_nxgraph(nxgraph, raise_errors=False, ignore_cell_type=ignore_cell_type,
+                                                        allow_selfloops=allow_selfloops):
             logging.warn("Created nxgraph did not pass validity test. "
                          "For details, run GraphLSTMNet.is_valid_nxgraph explicitly.")
         return nxgraph
 
     @staticmethod
-    def is_valid_nxgraph(nxgraph, raise_errors=True, ignore_cell_type=False):
+    def is_valid_nxgraph(nxgraph, raise_errors=True, ignore_cell_type=False, allow_selfloops=False):
         """Check if a given graph is a valid GraphLSTMNet graph.
 
         Args:
@@ -352,6 +351,8 @@ class GraphLSTMNet(RNNCell):
             a problem is detected.
           ignore_cell_type (bool): If True, the graph will not be considered 'bad'
             if its cells are not GraphLSTMCells.
+          allow_selfloops (bool): If True, the graph will not be considered 'bad'
+            if it contains selfloops.
 
         Returns:
           True if graph is fine, False otherwise.
@@ -369,6 +370,11 @@ class GraphLSTMNet(RNNCell):
                                 % str(nxgraph))
             if nxgraph.number_of_nodes() < 1:
                 raise ValueError("nxgraph needs at least one node.")
+            if not allow_selfloops and nx.number_of_selfloops(nxgraph) != 0:
+                raise ValueError("nxgraph has %i selfloops. "
+                                 "If this is expected, consider running is_valid_nxgraph with allow_selfloops=True.\n"
+                                 "Nodes with selfloops: %r"
+                                 % (nx.number_of_selfloops(nxgraph), list(nx.nodes_with_selfloops(nxgraph))))
             node_attr_lookuperr = None
             index_list = []
             for node_name in nxgraph.nodes:
@@ -404,6 +410,39 @@ class GraphLSTMNet(RNNCell):
             return False
         else:
             return True
+
+    @staticmethod
+    def transpose_output_from_cells_first_to_batch_first(output, time_major=False):
+        """Transpose a GraphLSTMNet output to the tf.nn.dynamic_rnn input format.
+
+        GraphLSTMNet accepts input in the shape [batch_size, number_of_nodes, inputs_size],
+        but the output is shaped [number_of_nodes, batch_size, output_size].
+        This method transposes the output to the input format, including the time dimension
+        introduced by tf.nn.dynamic_rnn.
+
+        Args:
+          output: A tensor of dimension [number_of_nodes, batch_size, output_size] or
+            [number_of_nodes, batch_size, max_time, output_size] if time_major=False or
+            [number_of_nodes, max_time, batch_size, output_size] if time_major=True.
+          time_major (bool): As used in tf.nn.dynamic_rnn. Default: False.
+
+        Returns:
+          The transposed tensor [batch_size, max_time, number_of_nodes, output_size].
+
+        Raises:
+          ValueError: If the tensor shape is invalid, i.e. the dimensionality is not 4.
+        """
+        output_tensor = ops.convert_to_tensor(output)
+        if len(output_tensor.shape) == 4:
+            if not time_major:
+                perm = [1, 2, 0, 3]
+            else:
+                perm = [2, 1, 0, 3]
+        else:
+            raise ValueError("output.shape needs to be of length 4 (for tf.nn.dynamic_rnn), "
+                             "but was %i. output.shape is %r"
+                             % (len(output.shape), output.shape))
+        return array_ops.transpose(output, perm)
 
     def __init__(self, nxgraph, num_units=None, state_is_tuple=True, name=None):
         """Create a Graph LSTM Network composed of a graph of GraphLSTMCells.
@@ -457,7 +496,7 @@ class GraphLSTMNet(RNNCell):
 
     @property
     def output_size(self):
-        return sum(self._cell(n).output_size for n in self._nxgraph)
+        return tuple(self._cell(n).output_size for n in self._nxgraph)
 
     def zero_state(self, batch_size, dtype):
         with ops.name_scope(type(self).__name__ + "ZeroState", values=[batch_size]):
@@ -525,8 +564,8 @@ class GraphLSTMNet(RNNCell):
 
                 # extract and collect states of neighbouring cells
                 neighbour_states_array = []
-                for neighbour_name, neighbour_obj in nx.all_neighbors(self._nxgraph, node_name):
-                    n_i = neighbour_obj[_INDEX]
+                for neighbour_name in nx.all_neighbors(self._nxgraph, node_name):
+                    n_i = self._nxgraph.node[neighbour_name][_INDEX]
                     # use updated state if node has been visited
                     # TODO: think about giving old _and_ new states to node for 100% paper fidelity
                     if new_states[n_i] is not None:
@@ -540,7 +579,7 @@ class GraphLSTMNet(RNNCell):
                     neighbour_states_array.append(n_state)
                 # make immutable
                 neighbour_states = tuple(neighbour_states_array)
-                # extract input of current cell from input tuple todo: figure out why returned batch_size is 1 in test
+                # extract input of current cell from input tuple
                 cur_inp = inputs[:, i]
                 # run current cell
                 cur_output, new_state = cell(cur_inp, cur_state, neighbour_states)

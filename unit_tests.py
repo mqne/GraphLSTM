@@ -5,6 +5,7 @@ import numpy as np
 from tensorflow.python.ops import rnn_cell_impl as orig_rci
 import graph as rci_graph
 import unittest
+import matplotlib.pyplot as plt
 
 # test graph: 20 nodes
 _kickoff_hand = [("t0", "wrist"), ("i0", "wrist"), ("m0", "wrist"), ("r0", "wrist"), ("p0", "wrist"), ("i0", "m0"),
@@ -229,6 +230,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
         self.assertRaises(IndexError, unet.call, ([cell_input]), ((cell_state_m, cell_state_h),))
 
     def test_call_uninodal_tf(self):
+        # TODO fix test_call_uninodal_tf (sess.run() etc)
         # set up net
         net, cell_name = self.get_uninodal_graphlstmnet()
 
@@ -387,6 +389,106 @@ class TestGraphLSTMNet(tf.test.TestCase):
         net = glstm.GraphLSTMNet(nxgraph)
         return net, cell_name
 
+    def test_call_multinodal_tf(self):
+        # graph:
+        #
+        #     +---c
+        # a---b   |
+        #     +---d
+
+        # populate network with constant cells
+        nxgraph = glstm.GraphLSTMNet.create_nxgraph([['a', 'b'], ['b', 'c'], ['b', 'd'], ['c', 'd']], 1,
+                                                    confidence_dict={'a': np.random.rand(), 'b': np.random.rand(),
+                                                                     'c': np.random.rand(), 'd': np.random.rand(), })
+        constant_cell_a = DummyFixedTfCell(1, memory_state=((0.,),), hidden_state=((1.,),))
+        constant_cell_b = DummyFixedTfCell(1, memory_state=((2.,),), hidden_state=((3.,),))
+        constant_cell_c = DummyFixedTfCell(1, memory_state=((4.,),), hidden_state=((5.,),))
+        constant_cell_d = DummyFixedTfCell(1, memory_state=((6.,),), hidden_state=((7.,),))
+
+        # create GraphLSTMNet for later replacement of nodes and evaluation
+        net = glstm.GraphLSTMNet([[1, 2]], 1)
+        net._nxgraph = nxgraph
+
+        # input dimensions: batch_size, max_time, [cell dimensions] e.g. for
+        #   GraphLSTMCell: input_size
+        #   GraphLSTMNet: cell_count, input_size
+
+        # return value of GraphLSTMNet: graph_output, new_states
+        # return value of DummyFixedTfCell: output, (state, output)
+        # return value of DummyReturnTfCell: input, state
+        # return value of dynamic_rnn: output [number_of_nodes, batch_size, max_time, cell.output_size], final_state
+
+        # fixed cells: 4 cells, 1 unit, input values arbitrary
+
+        # input size 2: [1 1 4 2]
+        input_data_cc = tf.placeholder(tf.float32, [None, None, 4, 2])
+        feed_dict_cc = {input_data_cc: [[[[314, 159], [265, 358], [979, 323], [846, 264]]]]}
+        # input_size is ignored by constant cell
+        cc_expected_result = ([[[1]]], [[[3]]], [[[5]]], [[[7]]]), \
+                             (([[0]], [[1]]), ([[2]], [[3]]), ([[4]], [[5]]), ([[6]], [[7]]))
+
+        # make return cells
+        return_cell_a = DummyReturnTfCell(3)
+        return_cell_b = DummyReturnTfCell(3)
+        return_cell_c = DummyReturnTfCell(3)
+        return_cell_d = DummyReturnTfCell(3)
+
+        # input size 3, batch size 5: [5 1 4 3]
+        input_data_rc = tf.placeholder(tf.float32, [5, 1, 4, 3])
+        rc_values = np.random.rand(5, 1, 4, 3)
+        feed_dict_rc = {input_data_rc: rc_values}
+        # input_size is ignored by constant cell
+        # state shape: number_of_nodes 4, state_size 2, batch_size 5, output_size 3  todo: maybe write a method for this
+        rc_expected_result = -np.swapaxes(np.swapaxes(rc_values, 0, 2), 1, 2), np.zeros([4, 2, 5, 3])  # and this
+
+        # todo: test communication between neighbours
+
+        with self.test_session() as sess:
+            tf.global_variables_initializer().run()
+
+            # if tests containing DummyFixedTfCells fail, this might mean there are problems in GraphLSTMNet
+            # AFTER calling the cell
+            msg = "Calling GraphLSTNet with dummy cells did not return expected values. " \
+                  "This could mean there is an error in GraphLSTMNet AFTER calling the cell."
+
+            # inject fixed cells into network graph
+            nxgraph.node['a'][_CELL] = constant_cell_a
+            nxgraph.node['b'][_CELL] = constant_cell_b
+            nxgraph.node['c'][_CELL] = constant_cell_c
+            nxgraph.node['d'][_CELL] = constant_cell_d
+
+            cc_returned_tensors = tf.nn.dynamic_rnn(net, input_data_cc, dtype=tf.float32)
+
+            self.assertEqual(len(cc_returned_tensors[0]), len(nxgraph),
+                             msg="GraphLSTMNet should return %i outputs (equaling number of nodes), but returned %i"
+                                 % (len(nxgraph), len(cc_returned_tensors[0])))
+
+            cc_actual_result = sess.run(cc_returned_tensors, feed_dict=feed_dict_cc)
+
+            np.testing.assert_equal(cc_actual_result, cc_expected_result, err_msg=msg)
+
+            # if tests containing DummyReturnTfCells fail, while those containing DummyFixedTfCells
+            # do not, this might mean there are problems in GraphLSTMNet BEFORE calling the cell
+            msg = "Calling GraphLSTNet with return cells did not return expected values. " \
+                  "This could mean there is an error in GraphLSTMNet BEFORE calling the cell."
+
+            # inject return cells into network graph
+            nxgraph.node['a'][_CELL] = return_cell_a
+            nxgraph.node['b'][_CELL] = return_cell_b
+            nxgraph.node['c'][_CELL] = return_cell_c
+            nxgraph.node['d'][_CELL] = return_cell_d
+
+            rc_returned_tensors = tf.nn.dynamic_rnn(net, input_data_rc, dtype=tf.float32)
+
+            self.assertEqual(len(rc_returned_tensors[0]), len(nxgraph),
+                             msg="GraphLSTMNet should return %i outputs (equaling number of nodes), but returned %i"
+                             % (len(nxgraph), len(rc_returned_tensors[0])))
+
+            rc_actual_result = sess.run(rc_returned_tensors, feed_dict=feed_dict_rc)
+
+            np.testing.assert_allclose(rc_actual_result[0], rc_expected_result[0], err_msg=msg)
+            np.testing.assert_allclose(rc_actual_result[1], rc_expected_result[1], err_msg=msg)
+
 
 class TestGraphLSTMLinear(tf.test.TestCase):
 
@@ -462,6 +564,12 @@ def print_node(name, g):
     print("graph.node[\"%s\"]: %s" % (name, str(g.node[name])))
 
 
+def plot_nxgraph(net):
+    plt.subplot()
+    nx.draw(net._nxgraph, with_labels=True)
+    plt.show()
+
+
 # return tuple of n objects
 def objects(n):
     r = []
@@ -480,6 +588,7 @@ def dirty_tests():
 def main():
     dirty_tests()
     with tf.variable_scope("unittest"):
+        # TestGraphLSTMNet.test_call_multinodal_tf(TestGraphLSTMNet())
         unittest.main()
 
 

@@ -4,6 +4,9 @@ tensorflow
 # required for unittests
 numpy
 
+# required when plotting the GraphLSTM graph
+matplotlib
+
 # not necessary, but needed for networkx conversion tests (will result in ImportWarning):
 pandas
 scipy
