@@ -230,7 +230,6 @@ class TestGraphLSTMNet(tf.test.TestCase):
         self.assertRaises(IndexError, unet.call, ([cell_input]), ((cell_state_m, cell_state_h),))
 
     def test_call_uninodal_tf(self):
-        # TODO fix test_call_uninodal_tf (sess.run() etc)
         # set up net
         net, cell_name = self.get_uninodal_graphlstmnet()
 
@@ -255,18 +254,18 @@ class TestGraphLSTMNet(tf.test.TestCase):
         input_data_xc1 = tf.placeholder(tf.float32, [None, None, 1, 4])
         feed_dict_xc1a = {input_data_xc1: [[[[6, 5, 4, 3]]]]}
         # input_size is ignored by constant cell
-        cc1a_expected_result = [[[3]]], ([[2]], [[3]])
+        cc1a_expected_result = [[[[3]]]], (([[2]], [[3]]),)
 
         # 1000 timesteps: [1 1000 1 1]
         input_data_cc1b = tf.placeholder(tf.float32, [None, None, 1, 1])
         feed_dict_cc1b = {input_data_cc1b: np.random.rand(1, 1000, 1, 1)}
         # timesteps are managed by dynamic_rnn
-        cc1b_expected_result = [[[3]] * 1000], ([[2]], [[3]])
+        cc1b_expected_result = [[[[3]] * 1000]], (([[2]], [[3]]),)
 
         # batch size 3: [3 1 1 1]
         feed_dict_cc1c = {input_data_cc1b: [[[[4]]], [[[17]]], [[[-9]]]]}
         # batch_size is ignored by constant cell
-        cc1c_expected_result = [[[3]]], ([[2]], [[3]])
+        cc1c_expected_result = [[[[3]]]], (([[2]], [[3]]),)
 
         # fixed cell 2: 3 units, input values arbitrary
 
@@ -274,23 +273,23 @@ class TestGraphLSTMNet(tf.test.TestCase):
         input_data_cc2 = tf.placeholder(tf.float32, [None, None, 1, 5])
         feed_dict_cc2 = {
             input_data_cc2: np.random.rand(3, 4, 1, 5)}
-        cc2_expected_result = [[[7, 8]] * 4, [[9, 10]] * 4, [[11, 12]] * 4], \
-                              ([[1, 2], [3, 4], [5, 6]], [[7, 8], [9, 10], [11, 12]])
+        cc2_expected_result = [[[[7, 8]] * 4, [[9, 10]] * 4, [[11, 12]] * 4]], \
+                              (([[1, 2], [3, 4], [5, 6]], [[7, 8], [9, 10], [11, 12]]),)
 
         # return cell 1: 4 units
 
         # input size 4: [1 1 1 4] (unmodified state -> zero-state)
-        rc1a_expected_result = [[[-6, -5, -4, -3]]], ([[0, 0, 0, 0]], [[0, 0, 0, 0]])
+        rc1a_expected_result = [[[[-6, -5, -4, -3]]]], (([[0, 0, 0, 0]], [[0, 0, 0, 0]]),)
 
         # 1000 timesteps, input size 4: [1 1000 1 4]
         rc1b_input_values = np.random.rand(1, 1000, 1, 4)
         feed_dict_rc1b = {input_data_xc1: rc1b_input_values}
-        rc1b_expected_result = -np.squeeze(rc1b_input_values, 2), ([[0, 0, 0, 0]], [[0, 0, 0, 0]])
+        rc1b_expected_result = [-np.squeeze(rc1b_input_values, 2)], (([[0, 0, 0, 0]], [[0, 0, 0, 0]]),)
 
         # batch size 3, input size 4: [3 1 1 4]
         rc1c_input_values = np.random.rand(3, 1, 1, 4)
         feed_dict_rc1c = {input_data_xc1: rc1c_input_values}
-        rc1c_expected_result = -np.squeeze(rc1c_input_values, 2), ([[0, 0, 0, 0]]*3, [[0, 0, 0, 0]]*3)
+        rc1c_expected_result = [-np.squeeze(rc1c_input_values, 2)], (([[0, 0, 0, 0]]*3, [[0, 0, 0, 0]]*3),)
 
         # return cell 2: 3 units, add_one_to_state_per_timestep True
 
@@ -298,15 +297,16 @@ class TestGraphLSTMNet(tf.test.TestCase):
         input_data_rc2 = tf.placeholder(tf.float32, [None, None, 1, 3])
         rc2_input_values = np.random.rand(2, 5, 1, 3)
         feed_dict_rc2 = {input_data_rc2: rc2_input_values}
-        rc2_expected_result = -np.squeeze(rc2_input_values, 2), ([[5, 5, 5]]*2, [[5, 5, 5]]*2)
+        rc2_expected_result = [-np.squeeze(rc2_input_values, 2)], (([[5, 5, 5]]*2, [[5, 5, 5]]*2),)
 
-        with self.test_session():
+        with self.test_session() as sess:
             tf.global_variables_initializer().run()
 
             # return value of GraphLSTMNet: graph_output, new_states
             # return value of DummyFixedTfCell: output, (state, output)
             # return value of DummyReturnTfCell: input, state
-            # return value of dynamic_rnn: output [batch_size, max_time, cell.output_size], final_state
+            # return value of dynamic_rnn: output [number_of_nodes, batch_size, max_time, cell.output_size],
+            #   [number_of_nodes, final_state]
 
             # if tests containing DummyFixedTfCells fail, this might mean there are problems in GraphLSTMNet
             # AFTER calling the cell
@@ -317,32 +317,21 @@ class TestGraphLSTMNet(tf.test.TestCase):
             net._nxgraph.node[cell_name][_CELL] = constant_cell_1
 
             cc1a_returned_tensors = tf.nn.dynamic_rnn(net, input_data_xc1, dtype=tf.float32)
-
-            cc1a_actual_result = cc1a_returned_tensors[0].eval(feed_dict=feed_dict_xc1a), \
-                (cc1a_returned_tensors[1][0][0].eval(feed_dict=feed_dict_xc1a),
-                 cc1a_returned_tensors[1][0][1].eval(feed_dict=feed_dict_xc1a))
+            cc1a_actual_result = sess.run(cc1a_returned_tensors, feed_dict=feed_dict_xc1a)
             np.testing.assert_equal(cc1a_actual_result, cc1a_expected_result, err_msg=msg)
 
             cc1bc_returned_tensors = tf.nn.dynamic_rnn(net, input_data_cc1b, dtype=tf.float32)
-
-            cc1b_actual_result = cc1bc_returned_tensors[0].eval(feed_dict=feed_dict_cc1b), \
-                (cc1bc_returned_tensors[1][0][0].eval(feed_dict=feed_dict_cc1b),
-                 cc1bc_returned_tensors[1][0][1].eval(feed_dict=feed_dict_cc1b))
+            cc1b_actual_result = sess.run(cc1bc_returned_tensors, feed_dict=feed_dict_cc1b)
             np.testing.assert_equal(cc1b_actual_result, cc1b_expected_result, err_msg=msg)
 
-            cc1c_actual_result = cc1bc_returned_tensors[0].eval(feed_dict=feed_dict_cc1c), \
-                (cc1bc_returned_tensors[1][0][0].eval(feed_dict=feed_dict_cc1c),
-                 cc1bc_returned_tensors[1][0][1].eval(feed_dict=feed_dict_cc1c))
+            cc1c_actual_result = sess.run(cc1bc_returned_tensors, feed_dict=feed_dict_cc1c)
             np.testing.assert_equal(cc1c_actual_result, cc1c_expected_result, err_msg=msg)
 
             # inject second fixed-cell into graph
             net._nxgraph.node[cell_name][_CELL] = constant_cell_2
 
-            cc2_returned_tensor = tf.nn.dynamic_rnn(net, input_data_cc2, dtype=tf.float32)
-
-            cc2_actual_result = cc2_returned_tensor[0].eval(feed_dict=feed_dict_cc2), \
-                                (cc2_returned_tensor[1][0][0].eval(feed_dict=feed_dict_cc2),
-                                 cc2_returned_tensor[1][0][1].eval(feed_dict=feed_dict_cc2))
+            cc2_returned_tensors = tf.nn.dynamic_rnn(net, input_data_cc2, dtype=tf.float32)
+            cc2_actual_result = sess.run(cc2_returned_tensors, feed_dict=feed_dict_cc2)
             np.testing.assert_equal(cc2_actual_result, cc2_expected_result, err_msg=msg)
 
             # if tests containing DummyReturnTfCells fail, while those containing DummyFixedTfCells
@@ -354,32 +343,24 @@ class TestGraphLSTMNet(tf.test.TestCase):
             net._nxgraph.node[cell_name][_CELL] = return_cell_1
 
             rc1_returned_tensor = tf.nn.dynamic_rnn(net, input_data_xc1, dtype=tf.float32)
-            rc1a_actual_result = rc1_returned_tensor[0].eval(feed_dict=feed_dict_xc1a), \
-                                (rc1_returned_tensor[1][0][0].eval(feed_dict=feed_dict_xc1a),
-                                 rc1_returned_tensor[1][0][1].eval(feed_dict=feed_dict_xc1a))
+            rc1a_actual_result = sess.run(rc1_returned_tensor, feed_dict=feed_dict_xc1a)
             np.testing.assert_equal(rc1a_actual_result, rc1a_expected_result, err_msg=msg)
 
-            rc1b_actual_result = rc1_returned_tensor[0].eval(feed_dict=feed_dict_rc1b), \
-                                 (rc1_returned_tensor[1][0][0].eval(feed_dict=feed_dict_rc1b),
-                                  rc1_returned_tensor[1][0][1].eval(feed_dict=feed_dict_rc1b))
+            rc1b_actual_result = sess.run(rc1_returned_tensor, feed_dict=feed_dict_rc1b)
             np.testing.assert_allclose(rc1b_actual_result[0], rc1b_expected_result[0], err_msg=msg)
-            np.testing.assert_equal(rc1b_actual_result[1:], rc1b_expected_result[1:], err_msg=msg)
+            np.testing.assert_equal(rc1b_actual_result[1], rc1b_expected_result[1], err_msg=msg)
 
-            rc1c_actual_result = rc1_returned_tensor[0].eval(feed_dict=feed_dict_rc1c), \
-                                 (rc1_returned_tensor[1][0][0].eval(feed_dict=feed_dict_rc1c),
-                                  rc1_returned_tensor[1][0][1].eval(feed_dict=feed_dict_rc1c))
+            rc1c_actual_result = sess.run(rc1_returned_tensor, feed_dict=feed_dict_rc1c)
             np.testing.assert_allclose(rc1c_actual_result[0], rc1c_expected_result[0], err_msg=msg)
-            np.testing.assert_equal(rc1c_actual_result[1:], rc1c_expected_result[1:], err_msg=msg)
+            np.testing.assert_equal(rc1c_actual_result[1], rc1c_expected_result[1], err_msg=msg)
 
             # inject second return-cell into graph
             net._nxgraph.node[cell_name][_CELL] = return_cell_2
 
             rc2_returned_tensor = tf.nn.dynamic_rnn(net, input_data_rc2, dtype=tf.float32)
-            rc2_actual_result = rc2_returned_tensor[0].eval(feed_dict=feed_dict_rc2), \
-                                 (rc2_returned_tensor[1][0][0].eval(feed_dict=feed_dict_rc2),
-                                  rc2_returned_tensor[1][0][1].eval(feed_dict=feed_dict_rc2))
+            rc2_actual_result = sess.run(rc2_returned_tensor, feed_dict=feed_dict_rc2)
             np.testing.assert_allclose(rc2_actual_result[0], rc2_expected_result[0], err_msg=msg)
-            np.testing.assert_equal(rc2_actual_result[1:], rc2_expected_result[1:], err_msg=msg)
+            np.testing.assert_equal(rc2_actual_result[1], rc2_expected_result[1], err_msg=msg)
 
     @staticmethod
     def get_uninodal_graphlstmnet(cell_name="node0", confidence=0):
@@ -416,7 +397,8 @@ class TestGraphLSTMNet(tf.test.TestCase):
         # return value of GraphLSTMNet: graph_output, new_states
         # return value of DummyFixedTfCell: output, (state, output)
         # return value of DummyReturnTfCell: input, state
-        # return value of dynamic_rnn: output [number_of_nodes, batch_size, max_time, cell.output_size], final_state
+        # return value of dynamic_rnn: output [number_of_nodes, batch_size, max_time, cell.output_size],
+        #   [number_of_nodes, final_state]
 
         # fixed cells: 4 cells, 1 unit, input values arbitrary
 
