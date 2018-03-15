@@ -131,6 +131,7 @@ class DummyReturnTfGLSTMCell(glstm.GraphLSTMCell):
     # testing state_size, output_size and __call__ by not overriding them
 
     def call(self, inputs, state):
+        # return DummyReturnTfCell.call(self, inputs, state)
         if self._return_sum_of_neighbour_states:
             state = glstm.LSTMStateTuple(tf.add_n([m for m, h in self._neighbour_states]), tf.add_n([h for m, h in self._neighbour_states]))
         elif self._add_one:
@@ -161,6 +162,8 @@ class DummyNeighbourHelperNet(orig_rci.RNNCell):
         return self._the_cell.zero_state(batch_size, dtype)
 
     def call(self, inputs, state):
+        print(state)
+        print("Dummy neighbour_states: " + repr(self._neighbour_states))
         return self._the_cell(inputs, state, self._neighbour_states)
 
 
@@ -629,10 +632,10 @@ class TestGraphLSTMCell(tf.test.TestCase):
         state_neighbour_2_t3 = glstm.LSTMStateTuple(np.random.rand(batch_size, num_units),
                                                     np.random.rand(batch_size, num_units))
 
-        state_neighbour_1_t4 = glstm.LSTMStateTuple(np.random.rand(batch_size, num_units),
-                                                    np.random.rand(batch_size, num_units))
-        state_neighbour_2_t4 = glstm.LSTMStateTuple(np.random.rand(batch_size, num_units),
-                                                    np.random.rand(batch_size, num_units))
+        state_neighbour_1_t4 = glstm.LSTMStateTuple(tf.constant(np.random.rand(batch_size, num_units)),
+                                                    tf.constant(np.random.rand(batch_size, num_units)))
+        state_neighbour_2_t4 = glstm.LSTMStateTuple(tf.constant(np.random.rand(batch_size, num_units)),
+                                                    tf.constant(np.random.rand(batch_size, num_units)))
 
         cell_neighbour_states_t1 = (state_neighbour_1_t1, state_neighbour_2_t1)
         cell_neighbour_states_t2 = (state_neighbour_1_t2, state_neighbour_2_t2)
