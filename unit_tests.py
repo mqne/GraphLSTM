@@ -90,7 +90,7 @@ class DummyReturnTfCell(orig_rci.RNNCell):
     def __init__(self, num_units, state_is_tuple=True, return_sum_of_neighbour_states=False,
                  add_one_to_state_per_timestep=False):
         if not state_is_tuple:
-            raise NotImplementedError("DummyFixedTfCell is only defined for state_is_tuple=True")
+            raise NotImplementedError("DummyReturnTfCell is only defined for state_is_tuple=True")
         super(DummyReturnTfCell, self).__init__()
         self._num_units = num_units
         self._return_sum_of_neighbour_states = return_sum_of_neighbour_states
@@ -115,6 +115,53 @@ class DummyReturnTfCell(orig_rci.RNNCell):
         elif self._add_one:
             state = tuple(x + 1 for x in state)
         return -inputs, state
+
+
+# cell that always returns (-inputs) and state or sum of neighbour states
+# and inherits non-unique stuff from GraphLSTMCell
+class DummyReturnTfGLSTMCell(glstm.GraphLSTMCell):
+    def __init__(self, num_units, state_is_tuple=True, return_sum_of_neighbour_states=False,
+                 add_one_to_state_per_timestep=False, *args, **kwargs):
+        if not state_is_tuple:
+            raise NotImplementedError("DummyReturnTfGLSTMCell is only defined for state_is_tuple=True")
+        super(DummyReturnTfGLSTMCell, self).__init__(num_units, state_is_tuple=state_is_tuple, *args, **kwargs)
+        self._return_sum_of_neighbour_states = return_sum_of_neighbour_states
+        self._add_one = add_one_to_state_per_timestep
+
+    # testing state_size, output_size and __call__ by not overriding them
+
+    def call(self, inputs, state):
+        if self._return_sum_of_neighbour_states:
+            state = glstm.LSTMStateTuple(tf.add_n([m for m, h in self._neighbour_states]), tf.add_n([h for m, h in self._neighbour_states]))
+        elif self._add_one:
+            state = glstm.LSTMStateTuple(*[x + 1 for x in state])
+        return -inputs, state
+
+
+# feeds its GraphLSTMCell the same neighbour_states vector each timestep
+class DummyNeighbourHelperNet(orig_rci.RNNCell):
+    def __init__(self, num_units, the_cell, neighbour_states):
+        super(DummyNeighbourHelperNet, self).__init__()
+        assert(isinstance(the_cell, glstm.GraphLSTMCell))
+        self._num_units = num_units
+        self._the_cell = the_cell
+        self._neighbour_states = neighbour_states
+
+    @property
+    def state_size(self):
+        # return self._the_cell.state_size
+        return glstm.LSTMStateTuple(self._num_units, self._num_units)
+
+    @property
+    def output_size(self):
+        # return self._the_cell.output_size
+        return self._num_units
+
+    def zero_state(self, batch_size, dtype):
+        return self._the_cell.zero_state(batch_size, dtype)
+
+    def call(self, inputs, state):
+        return self._the_cell(inputs, state, self._neighbour_states)
 
 
 class TestGraphLSTMNet(tf.test.TestCase):
@@ -300,7 +347,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
         rc2_expected_result = [-np.squeeze(rc2_input_values, 2)], (([[5, 5, 5]] * 2, [[5, 5, 5]] * 2),)
 
         with self.test_session() as sess:
-            tf.global_variables_initializer().run()
+            # tf.global_variables_initializer().run()
 
             # return value of GraphLSTMNet: graph_output, new_states
             # return value of DummyFixedTfCell: output, (state, output)
@@ -459,7 +506,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
             np.zeros([2, 2, 2]) + 22, np.zeros([2, 2, 2]) + 52, np.zeros([2, 2, 2]) + 4, np.zeros([2, 2, 2]) + 26)
 
         with self.test_session() as sess:
-            tf.global_variables_initializer().run()
+            # tf.global_variables_initializer().run()
 
             # if tests containing DummyFixedTfCells fail, this might mean there are problems in GraphLSTMNet
             # AFTER calling the cell
@@ -518,7 +565,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
 
             self.assertEqual(len(rcn_cdab_returned_tensors[0]), len(nxgraph),
                              msg="GraphLSTMNet should return %i outputs (equaling number of nodes), but returned %i"
-                                 % (len(nxgraph), len(rc_returned_tensors[0])))
+                                 % (len(nxgraph), len(rcn_cdab_returned_tensors[0])))
 
             # test batch size 5, 1 timestep
             rcn_cdab_actual_result = sess.run(rcn_cdab_returned_tensors, feed_dict=feed_dict_rcn_cdab_t1)
@@ -531,6 +578,146 @@ class TestGraphLSTMNet(tf.test.TestCase):
 
             np.testing.assert_allclose(rcn_cdab_actual_result[0], rcn_cdab_t4_expected_output, err_msg=msg)
             np.testing.assert_allclose(rcn_cdab_actual_result[1], rcn_cdab_t4_expected_final_state, err_msg=msg)
+
+
+class TestGraphLSTMCell(tf.test.TestCase):
+
+    def setUp(self):
+        self.longMessage = True
+
+    def test_init_and___call__(self):
+        cell_name = "testcell"
+        num_units = 3
+        batch_size = 2
+        time_steps = 4
+
+        dummy_glstm_cell = DummyReturnTfGLSTMCell(num_units, return_sum_of_neighbour_states=True)
+        # TODO: why does everything explode for return_sum...=True, but not for False?
+        # TODO once everything works: reimplement name= , look at local history at 2:39 (graph_lstm)
+
+
+        # self.assertEqual(dummy_glstm_cell.name, "GraphLSTMCell_" + cell_name)
+        self.assertEqual(dummy_glstm_cell.output_size, num_units)
+        self.assertIsInstance(dummy_glstm_cell.state_size, glstm.LSTMStateTuple)
+        self.assertEqual(dummy_glstm_cell.state_size, (num_units, num_units))
+
+        # input dimensions: batch_size, max_time, [cell dimensions] e.g. for
+        #   GraphLSTMCell: input_size
+        #   GraphLSTMNet: number_of_nodes, input_size
+
+        # return value of GraphLSTMNet: graph_output, new_states
+        # return value of DummyFixedTfCell: output, (state, output)
+        # return value of DummyReturnTfCell: input, state
+        # return value of dynamic_rnn: output [number_of_nodes, batch_size, max_time, cell.output_size],
+        #   final_state [number_of_nodes, state_size (2 for LSTM), batch_size, output_size]
+
+        cell_inputs_values = np.random.rand(batch_size, time_steps, dummy_glstm_cell.output_size)
+        cell_inputs = tf.placeholder(tf.float32, cell_inputs_values.shape)
+
+        state_neighbour_1_t1 = glstm.LSTMStateTuple(np.random.rand(batch_size, num_units),
+                                                    np.random.rand(batch_size, num_units))
+        state_neighbour_2_t1 = glstm.LSTMStateTuple(np.random.rand(batch_size, num_units),
+                                                    np.random.rand(batch_size, num_units))
+
+        state_neighbour_1_t2 = glstm.LSTMStateTuple(np.random.rand(batch_size, num_units),
+                                                    np.random.rand(batch_size, num_units))
+        state_neighbour_2_t2 = glstm.LSTMStateTuple(np.random.rand(batch_size, num_units),
+                                                    np.random.rand(batch_size, num_units))
+
+        state_neighbour_1_t3 = glstm.LSTMStateTuple(np.random.rand(batch_size, num_units),
+                                                    np.random.rand(batch_size, num_units))
+        state_neighbour_2_t3 = glstm.LSTMStateTuple(np.random.rand(batch_size, num_units),
+                                                    np.random.rand(batch_size, num_units))
+
+        state_neighbour_1_t4 = glstm.LSTMStateTuple(np.random.rand(batch_size, num_units),
+                                                    np.random.rand(batch_size, num_units))
+        state_neighbour_2_t4 = glstm.LSTMStateTuple(np.random.rand(batch_size, num_units),
+                                                    np.random.rand(batch_size, num_units))
+
+        cell_neighbour_states_t1 = (state_neighbour_1_t1, state_neighbour_2_t1)
+        cell_neighbour_states_t2 = (state_neighbour_1_t2, state_neighbour_2_t2)
+        cell_neighbour_states_t3 = (state_neighbour_1_t3, state_neighbour_2_t3)
+        cell_neighbour_states_t4 = (state_neighbour_1_t4, state_neighbour_2_t4)
+
+        # time, numnodes, batchsize, inputsize
+        # cell_neighbour_states_feed = tf.transpose(tf.constant(
+        #     [cell_neighbour_states_t1, cell_neighbour_states_t2, cell_neighbour_states_t3, cell_neighbour_states_t4]),
+        #                                           [2, 0, 1, 3])
+
+        expected_output = -np.swapaxes(np.swapaxes(cell_inputs_values, 0, 2), 1, 2)
+        # state shape: state_size 2, batch_size 2, output_size 3
+        expected_final_state = (np.zeros([2, 2, 3]) + time_steps)
+        expected_final_state = np.array(cell_neighbour_states_t4) * time_steps
+
+        helper_net = DummyNeighbourHelperNet(num_units, dummy_glstm_cell, cell_neighbour_states_t4)
+
+        with self.test_session() as sess:
+            return_tensor = tf.nn.dynamic_rnn(helper_net, cell_inputs, dtype=tf.float32)
+
+            actual_result = sess.run(return_tensor, feed_dict={cell_inputs: cell_inputs_values})
+            print(actual_result)
+
+
+class TestGraphLSTMCellAndNet(tf.test.TestCase):
+
+    def setUp(self):
+        self.longMessage = True
+
+    def test_cell_init_and___call__in_full_net(self):
+        # create a DummyReturnTfCell calling/inheriting init and __call__ and test it
+        # basically repeat the last test from TestGraphLSTMNet.test_call_multinodal_tf
+        # with a DummyReturnTfGLSTMCell
+
+        # update order: c, d, a, b
+        nxgraph = glstm.GraphLSTMNet.create_nxgraph([['a', 'b'], ['b', 'c'], ['b', 'd'], ['c', 'd']], 1,
+                                                    confidence_dict={"c": 1, "d": 0.9, "a": .6, "b": -2})
+        net = glstm.GraphLSTMNet(nxgraph)
+
+        # make return cells with inter-neighbour communication
+        # c increases its state by 1 each timestep, starting from 0
+        # a, b and d return the sum of their neighbouring states
+        return_neighbour_cell_a = DummyReturnTfGLSTMCell(2, return_sum_of_neighbour_states=True)
+        return_neighbour_cell_b = DummyReturnTfGLSTMCell(2, return_sum_of_neighbour_states=True)
+        return_neighbour_cell_c = DummyReturnTfGLSTMCell(2, add_one_to_state_per_timestep=True)
+        return_neighbour_cell_d = DummyReturnTfGLSTMCell(2, return_sum_of_neighbour_states=True)
+
+        # input size 2, 4 nodes: [? ? 4 2]
+        input_data_rcn_cdab = tf.placeholder(tf.float32, [None, None, 4, 2])
+
+        # time sequence of state values:
+        #   t   a   b   c   d
+        #   1   0   2   1   1
+        #   2   2   8   2   4
+        #   3   8   22  3   11
+        #   4   22  52  4   26
+
+        # batch size 2, 4 timesteps, number_of_nodes 4, input/output size 2: [2 4 4 2]
+        rcn_cdab_t4_values = np.random.rand(2, 4, 4, 2)
+        feed_dict_rcn_cdab_t4 = {input_data_rcn_cdab: rcn_cdab_t4_values}
+        # state shape: number_of_nodes 4, state_size 2, batch_size 2, output_size 3
+        rcn_cdab_t4_expected_output = -np.swapaxes(np.swapaxes(rcn_cdab_t4_values, 0, 2), 1, 2)
+        rcn_cdab_t4_expected_final_state = (
+            np.zeros([2, 2, 2]) + 22, np.zeros([2, 2, 2]) + 52, np.zeros([2, 2, 2]) + 4, np.zeros([2, 2, 2]) + 26)
+
+        with self.test_session() as sess:
+
+            # inject neighbour-aware return cells into network graph
+            nxgraph.node['a'][_CELL] = return_neighbour_cell_a
+            nxgraph.node['b'][_CELL] = return_neighbour_cell_b
+            nxgraph.node['c'][_CELL] = return_neighbour_cell_c
+            nxgraph.node['d'][_CELL] = return_neighbour_cell_d
+
+            rcn_cdab_returned_tensors = tf.nn.dynamic_rnn(net, input_data_rcn_cdab, dtype=tf.float32)
+
+            self.assertEqual(len(rcn_cdab_returned_tensors[0]), len(nxgraph),
+                             msg="GraphLSTMNet should return %i outputs (equaling number of nodes), but returned %i"
+                                 % (len(nxgraph), len(rcn_cdab_returned_tensors[0])))
+
+            # test batch size 2, 4 timesteps
+            rcn_cdab_actual_result = sess.run(rcn_cdab_returned_tensors, feed_dict=feed_dict_rcn_cdab_t4)
+
+            np.testing.assert_allclose(rcn_cdab_actual_result[0], rcn_cdab_t4_expected_output)
+            np.testing.assert_allclose(rcn_cdab_actual_result[1], rcn_cdab_t4_expected_final_state)
 
 
 class TestGraphLSTMLinear(tf.test.TestCase):
