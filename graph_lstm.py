@@ -64,7 +64,7 @@ class GraphLSTMCell(RNNCell):
     """
 
     def __init__(self, num_units, forget_bias=1.0,
-                 state_is_tuple=True, activation=None, reuse=None):
+                 state_is_tuple=True, activation=None, reuse=None, name=None):
         """Initialize the Graph LSTM cell.
 
         Args:
@@ -84,7 +84,7 @@ class GraphLSTMCell(RNNCell):
           When restoring from CudnnLSTM-trained checkpoints, must use
           CudnnCompatibleLSTMCell instead.
         """
-        super(GraphLSTMCell, self).__init__(_reuse=reuse)
+        super(GraphLSTMCell, self).__init__(_reuse=reuse, name=name)
         if not state_is_tuple:
             logging.warn("%s: Using a concatenated state is UNTESTED for this GraphLSTM implementation. "
                          "If it works, it is likely to be slower and will soon be "
@@ -334,7 +334,7 @@ class GraphLSTMNet(RNNCell):
                     if num_units < 1:
                         raise ValueError("num_units must be a positive integer, but found: %i" % num_units)
                     num_units_type_checked_flag = True
-                nxgraph.nodes[node_name][_CELL] = GraphLSTMCell(num_units, **graphlstmcell_kwargs)
+                nxgraph.nodes[node_name][_CELL] = GraphLSTMCell(num_units, name="GraphLSTMCell_" + str(node_name), **graphlstmcell_kwargs)
         if verify and not GraphLSTMNet.is_valid_nxgraph(nxgraph, raise_errors=False, ignore_cell_type=ignore_cell_type,
                                                         allow_selfloops=allow_selfloops):
             logging.warn("Created nxgraph did not pass validity test. "

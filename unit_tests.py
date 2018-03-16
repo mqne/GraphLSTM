@@ -133,7 +133,8 @@ class DummyReturnTfGLSTMCell(glstm.GraphLSTMCell):
     def call(self, inputs, state):
         # same as DummyReturnTfCell.call(self, inputs, state) with addition of own state each timestep
         if self._return_sum_of_neighbour_states:
-            state = glstm.LSTMStateTuple(tf.add_n([m for m, h in self._neighbour_states]) + state[0], tf.add_n([h for m, h in self._neighbour_states]) + state[1])
+            state = glstm.LSTMStateTuple(tf.add_n([m for m, h in self._neighbour_states]) + state[0],
+                                         tf.add_n([h for m, h in self._neighbour_states]) + state[1])
         elif self._add_one:
             state = glstm.LSTMStateTuple(*[x + 1 for x in state])
         return -inputs, state
@@ -143,7 +144,7 @@ class DummyReturnTfGLSTMCell(glstm.GraphLSTMCell):
 class DummyNeighbourHelperNet(orig_rci.RNNCell):
     def __init__(self, cell, neighbour_states):
         super(DummyNeighbourHelperNet, self).__init__()
-        assert(isinstance(cell, glstm.GraphLSTMCell))
+        assert isinstance(cell, glstm.GraphLSTMCell)
         self._cell = cell
         # neighbour_states dimensions: num_neighbours, batch_size, num_units
         self._neighbour_states = neighbour_states
@@ -211,6 +212,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
         for n in ['a', 'b', 'c']:
             self.assertIsInstance(v_graph.node[n][_CELL], glstm.GraphLSTMCell)
             self.assertEqual(v_graph.node[n][_CELL].output_size, 6)
+            self.assertEqual(v_graph.node[n][_CELL].name, "GraphLSTMCell_" + n)
 
         # **kwargs
         # invalid keyword
@@ -590,11 +592,9 @@ class TestGraphLSTMCell(tf.test.TestCase):
         batch_size = 2
         time_steps = 4
 
-        dummy_glstm_cell = DummyReturnTfGLSTMCell(num_units, return_sum_of_neighbour_states=True)
-        # TODO once everything works: reimplement name= , look at local history at 2:39 (graph_lstm)
+        dummy_glstm_cell = DummyReturnTfGLSTMCell(num_units, return_sum_of_neighbour_states=True, name=cell_name)
 
-
-        # self.assertEqual(dummy_glstm_cell.name, "GraphLSTMCell_" + cell_name)
+        self.assertEqual(dummy_glstm_cell.name, cell_name)
         self.assertEqual(dummy_glstm_cell.output_size, num_units)
         self.assertIsInstance(dummy_glstm_cell.state_size, glstm.LSTMStateTuple)
         self.assertEqual(dummy_glstm_cell.state_size, (num_units, num_units))
@@ -629,7 +629,8 @@ class TestGraphLSTMCell(tf.test.TestCase):
 
         expected_output = -cell_inputs_values
         # state shape: state_size 2, batch_size 2, output_size 3
-        expected_final_state = np.sum([[neighbour_state_1_values_c, neighbour_state_1_values_h], [neighbour_state_2_values_c, neighbour_state_2_values_h]], axis=0) * time_steps
+        expected_final_state = np.sum([[neighbour_state_1_values_c, neighbour_state_1_values_h],
+                                       [neighbour_state_2_values_c, neighbour_state_2_values_h]], axis=0) * time_steps
 
         helper_net = DummyNeighbourHelperNet(dummy_glstm_cell, cell_neighbour_states_t4)
 
@@ -684,7 +685,6 @@ class TestGraphLSTMCellAndNet(tf.test.TestCase):
             np.zeros([2, 2, 2]) + 59, np.zeros([2, 2, 2]) + 178, np.zeros([2, 2, 2]) + 4, np.zeros([2, 2, 2]) + 69)
 
         with self.test_session() as sess:
-
             # inject neighbour-aware return cells into network graph
             nxgraph.node['a'][_CELL] = return_neighbour_cell_a
             nxgraph.node['b'][_CELL] = return_neighbour_cell_b
