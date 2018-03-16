@@ -579,7 +579,6 @@ class GraphLSTMNet(RNNCell):
                     neighbour_states_array.append(n_state)
                 # make immutable
                 neighbour_states = tuple(neighbour_states_array)
-                print("GLSTM neighbour_states: " + repr(neighbour_states))  # TODO remove this statement
                 # extract input of current cell from input tuple
                 cur_inp = inputs[:, i]
                 # run current cell

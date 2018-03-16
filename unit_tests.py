@@ -131,9 +131,9 @@ class DummyReturnTfGLSTMCell(glstm.GraphLSTMCell):
     # testing state_size, output_size and __call__ by not overriding them
 
     def call(self, inputs, state):
-        # return DummyReturnTfCell.call(self, inputs, state)
+        # same as DummyReturnTfCell.call(self, inputs, state) with addition of own state each timestep
         if self._return_sum_of_neighbour_states:
-            state = glstm.LSTMStateTuple(tf.add_n([m for m, h in self._neighbour_states]), tf.add_n([h for m, h in self._neighbour_states]))
+            state = glstm.LSTMStateTuple(tf.add_n([m for m, h in self._neighbour_states]) + state[0], tf.add_n([h for m, h in self._neighbour_states]) + state[1])
         elif self._add_one:
             state = glstm.LSTMStateTuple(*[x + 1 for x in state])
         return -inputs, state
@@ -141,30 +141,26 @@ class DummyReturnTfGLSTMCell(glstm.GraphLSTMCell):
 
 # feeds its GraphLSTMCell the same neighbour_states vector each timestep
 class DummyNeighbourHelperNet(orig_rci.RNNCell):
-    def __init__(self, num_units, the_cell, neighbour_states):
+    def __init__(self, cell, neighbour_states):
         super(DummyNeighbourHelperNet, self).__init__()
-        assert(isinstance(the_cell, glstm.GraphLSTMCell))
-        self._num_units = num_units
-        self._the_cell = the_cell
+        assert(isinstance(cell, glstm.GraphLSTMCell))
+        self._cell = cell
+        # neighbour_states dimensions: num_neighbours, batch_size, num_units
         self._neighbour_states = neighbour_states
 
     @property
     def state_size(self):
-        # return self._the_cell.state_size
-        return glstm.LSTMStateTuple(self._num_units, self._num_units)
+        return self._cell.state_size
 
     @property
     def output_size(self):
-        # return self._the_cell.output_size
-        return self._num_units
+        return self._cell.output_size
 
     def zero_state(self, batch_size, dtype):
-        return self._the_cell.zero_state(batch_size, dtype)
+        return self._cell.zero_state(batch_size, dtype)
 
     def call(self, inputs, state):
-        print(state)
-        print("Dummy neighbour_states: " + repr(self._neighbour_states))
-        return self._the_cell(inputs, state, self._neighbour_states)
+        return self._cell(inputs, state, self._neighbour_states)
 
 
 class TestGraphLSTMNet(tf.test.TestCase):
@@ -595,7 +591,6 @@ class TestGraphLSTMCell(tf.test.TestCase):
         time_steps = 4
 
         dummy_glstm_cell = DummyReturnTfGLSTMCell(num_units, return_sum_of_neighbour_states=True)
-        # TODO: why does everything explode for return_sum...=True, but not for False?
         # TODO once everything works: reimplement name= , look at local history at 2:39 (graph_lstm)
 
 
@@ -617,48 +612,34 @@ class TestGraphLSTMCell(tf.test.TestCase):
         cell_inputs_values = np.random.rand(batch_size, time_steps, dummy_glstm_cell.output_size)
         cell_inputs = tf.placeholder(tf.float32, cell_inputs_values.shape)
 
-        state_neighbour_1_t1 = glstm.LSTMStateTuple(np.random.rand(batch_size, num_units),
-                                                    np.random.rand(batch_size, num_units))
-        state_neighbour_2_t1 = glstm.LSTMStateTuple(np.random.rand(batch_size, num_units),
-                                                    np.random.rand(batch_size, num_units))
+        neighbour_state_1_values_c = np.random.rand(batch_size, num_units)
+        neighbour_state_1_values_h = np.random.rand(batch_size, num_units)
+        neighbour_state_2_values_c = np.random.rand(batch_size, num_units)
+        neighbour_state_2_values_h = np.random.rand(batch_size, num_units)
 
-        state_neighbour_1_t2 = glstm.LSTMStateTuple(np.random.rand(batch_size, num_units),
-                                                    np.random.rand(batch_size, num_units))
-        state_neighbour_2_t2 = glstm.LSTMStateTuple(np.random.rand(batch_size, num_units),
-                                                    np.random.rand(batch_size, num_units))
+        # not explicitly converting with dtype=tf.float32 destroys the whole testsuite in weird ways,
+        # inflicting errors in parts not at all connected to this one
 
-        state_neighbour_1_t3 = glstm.LSTMStateTuple(np.random.rand(batch_size, num_units),
-                                                    np.random.rand(batch_size, num_units))
-        state_neighbour_2_t3 = glstm.LSTMStateTuple(np.random.rand(batch_size, num_units),
-                                                    np.random.rand(batch_size, num_units))
+        state_neighbour_1_t4 = glstm.LSTMStateTuple(tf.convert_to_tensor(neighbour_state_1_values_c, dtype=tf.float32),
+                                                    tf.convert_to_tensor(neighbour_state_1_values_h, dtype=tf.float32))
+        state_neighbour_2_t4 = glstm.LSTMStateTuple(tf.convert_to_tensor(neighbour_state_2_values_c, dtype=tf.float32),
+                                                    tf.convert_to_tensor(neighbour_state_2_values_h, dtype=tf.float32))
 
-        state_neighbour_1_t4 = glstm.LSTMStateTuple(tf.constant(np.random.rand(batch_size, num_units)),
-                                                    tf.constant(np.random.rand(batch_size, num_units)))
-        state_neighbour_2_t4 = glstm.LSTMStateTuple(tf.constant(np.random.rand(batch_size, num_units)),
-                                                    tf.constant(np.random.rand(batch_size, num_units)))
-
-        cell_neighbour_states_t1 = (state_neighbour_1_t1, state_neighbour_2_t1)
-        cell_neighbour_states_t2 = (state_neighbour_1_t2, state_neighbour_2_t2)
-        cell_neighbour_states_t3 = (state_neighbour_1_t3, state_neighbour_2_t3)
         cell_neighbour_states_t4 = (state_neighbour_1_t4, state_neighbour_2_t4)
 
-        # time, numnodes, batchsize, inputsize
-        # cell_neighbour_states_feed = tf.transpose(tf.constant(
-        #     [cell_neighbour_states_t1, cell_neighbour_states_t2, cell_neighbour_states_t3, cell_neighbour_states_t4]),
-        #                                           [2, 0, 1, 3])
-
-        expected_output = -np.swapaxes(np.swapaxes(cell_inputs_values, 0, 2), 1, 2)
+        expected_output = -cell_inputs_values
         # state shape: state_size 2, batch_size 2, output_size 3
-        expected_final_state = (np.zeros([2, 2, 3]) + time_steps)
-        expected_final_state = np.array(cell_neighbour_states_t4) * time_steps
+        expected_final_state = np.sum([[neighbour_state_1_values_c, neighbour_state_1_values_h], [neighbour_state_2_values_c, neighbour_state_2_values_h]], axis=0) * time_steps
 
-        helper_net = DummyNeighbourHelperNet(num_units, dummy_glstm_cell, cell_neighbour_states_t4)
+        helper_net = DummyNeighbourHelperNet(dummy_glstm_cell, cell_neighbour_states_t4)
 
         with self.test_session() as sess:
             return_tensor = tf.nn.dynamic_rnn(helper_net, cell_inputs, dtype=tf.float32)
 
             actual_result = sess.run(return_tensor, feed_dict={cell_inputs: cell_inputs_values})
-            print(actual_result)
+
+            np.testing.assert_allclose(actual_result[0], expected_output)
+            np.testing.assert_allclose(actual_result[1], expected_final_state)
 
 
 class TestGraphLSTMCellAndNet(tf.test.TestCase):
@@ -690,9 +671,9 @@ class TestGraphLSTMCellAndNet(tf.test.TestCase):
         # time sequence of state values:
         #   t   a   b   c   d
         #   1   0   2   1   1
-        #   2   2   8   2   4
-        #   3   8   22  3   11
-        #   4   22  52  4   26
+        #   2   2   11  2   5
+        #   3   13  46  3   19
+        #   4   59  178 4   69
 
         # batch size 2, 4 timesteps, number_of_nodes 4, input/output size 2: [2 4 4 2]
         rcn_cdab_t4_values = np.random.rand(2, 4, 4, 2)
@@ -700,7 +681,7 @@ class TestGraphLSTMCellAndNet(tf.test.TestCase):
         # state shape: number_of_nodes 4, state_size 2, batch_size 2, output_size 3
         rcn_cdab_t4_expected_output = -np.swapaxes(np.swapaxes(rcn_cdab_t4_values, 0, 2), 1, 2)
         rcn_cdab_t4_expected_final_state = (
-            np.zeros([2, 2, 2]) + 22, np.zeros([2, 2, 2]) + 52, np.zeros([2, 2, 2]) + 4, np.zeros([2, 2, 2]) + 26)
+            np.zeros([2, 2, 2]) + 59, np.zeros([2, 2, 2]) + 178, np.zeros([2, 2, 2]) + 4, np.zeros([2, 2, 2]) + 69)
 
         with self.test_session() as sess:
 
