@@ -207,14 +207,16 @@ class GraphLSTMCell(RNNCell):
         g_u = sigmoid(_graphlstm_linear([w_u, u_u, u_un, b_u], [inputs, h_i, h_j_avg], self.output_size, True))
         # adaptive forget gate
         # g_fij = sigmoid ( f_{i,t+1} * W_f + h_{j,t} * U_fn + b_f ) for every neighbour j
-        g_fij = [sigmoid(_graphlstm_linear([w_f, u_fn, b_f], [inputs, h_j], self.output_size, True)) for h_j in h_j_all]
+        g_fij = [sigmoid(_graphlstm_linear([w_f, u_fn, b_f], [inputs, h_j], self.output_size, True,
+                                           reuse_weights=None if j == 0 else [w_f, u_fn, b_f]))
+                 for j, h_j in enumerate(h_j_all)]
         # forget gate
         # g_fi = sigmoid ( f_{i,t+1} * W_f + h_{i,t} * U_f + b_f )
         g_fi = sigmoid(_graphlstm_linear([w_f, u_f, b_f], [inputs, h_i], self.output_size, True,
                                          reuse_weights=[w_f, b_f]))
         # output gate
         # g_o = sigmoid ( f_{i,t+1} * W_o + h_{i,t} * U_o + h^-_{i,t} * U_{on} + b_o )
-        g_o = sigmoid(_graphlstm_linear([w_o, u_o, u_on, b_o], [inputs, h_i, h_j_avg], self.output_size, True))
+        g_o = sigmoid(_graphlstm_linear([w_o, u_o, u_on, b_o], [inputs, h_i, h_j_avg], self.output_size, True))  # todo debug here
         # memory gate
         # g_c = tanh ( f_{i,t+1} * W_c + h_{i,t} * U_c + h^-_{i,t} * U_{cn} + b_c )
         g_c = tanh(_graphlstm_linear([w_c, u_c, u_cn, b_c], [inputs, h_i, h_j_avg], self.output_size, True))
@@ -516,7 +518,7 @@ class GraphLSTMNet(RNNCell):
           state: A tuple or tensor of states for each node.
         """
 
-        # check if input dimensions match expectation todo: test this
+        # check if input dimensions match expectation
         if len(inputs.shape) != 3:
             raise ValueError("Input shape mismatch: expected tensor of 3 dimensions "
                              "(batch_size, cell_count, input_size), but saw %i: "

@@ -298,6 +298,11 @@ class TestGraphLSTMNet(tf.test.TestCase):
 
         # fixed cell 1: 1 unit, input values arbitrary
 
+        # shape check test: too many dimensions
+        input_data_xc1_e1 = tf.placeholder(tf.float32, [None, None, 2, 1, 4])
+        # shape check test: wrong number of graph nodes
+        input_data_xc1_e2 = tf.placeholder(tf.float32, [None, None, 2, 4])
+
         # input size 4: [1 1 1 4]
         input_data_xc1 = tf.placeholder(tf.float32, [None, None, 1, 4])
         feed_dict_xc1a = {input_data_xc1: [[[[6, 5, 4, 3]]]]}
@@ -363,6 +368,13 @@ class TestGraphLSTMNet(tf.test.TestCase):
 
             # inject first fixed-cell into graph
             net._nxgraph.node[cell_name][_CELL] = constant_cell_1
+
+            self.assertRaisesRegex(ValueError, "Input shape mismatch: .* but saw 4", tf.nn.dynamic_rnn, net,
+                                   input_data_xc1_e1, dtype=tf.float32)
+            self.assertRaisesRegex(ValueError,
+                                   "Number of nodes in GraphLSTMNet input \(2\) "
+                                   "does not match number of graph nodes \(1\)",
+                                   tf.nn.dynamic_rnn, net, input_data_xc1_e2, dtype=tf.float32)
 
             cc1a_returned_tensors = tf.nn.dynamic_rnn(net, input_data_xc1, dtype=tf.float32)
             cc1a_actual_result = sess.run(cc1a_returned_tensors, feed_dict=feed_dict_xc1a)
@@ -580,6 +592,8 @@ class TestGraphLSTMNet(tf.test.TestCase):
             np.testing.assert_allclose(rcn_cdab_actual_result[0], rcn_cdab_t4_expected_output, err_msg=msg)
             np.testing.assert_allclose(rcn_cdab_actual_result[1], rcn_cdab_t4_expected_final_state, err_msg=msg)
 
+def _graphlstm_linear(*args, **kwargs):  # todo override method in graph_lstm.py while calling cell, or find other way
+    print("This is the new _graphlstm_linear method")
 
 class TestGraphLSTMCell(tf.test.TestCase):
 
@@ -635,6 +649,61 @@ class TestGraphLSTMCell(tf.test.TestCase):
         helper_net = DummyNeighbourHelperNet(dummy_glstm_cell, cell_neighbour_states_t4)
 
         with self.test_session() as sess:
+            return_tensor = tf.nn.dynamic_rnn(helper_net, cell_inputs, dtype=tf.float32)
+
+            actual_result = sess.run(return_tensor, feed_dict={cell_inputs: cell_inputs_values})
+
+            np.testing.assert_allclose(actual_result[0], expected_output)
+            np.testing.assert_allclose(actual_result[1], expected_final_state)
+
+    def test_call(self):
+        num_units = 3
+        batch_size = 2
+        time_steps = 4
+
+        glstm_cell = glstm.GraphLSTMCell(num_units)
+
+        self.assertEqual(glstm_cell.output_size, num_units)
+        self.assertIsInstance(glstm_cell.state_size, glstm.LSTMStateTuple)
+        self.assertEqual(glstm_cell.state_size, (num_units, num_units))
+
+        # input dimensions: batch_size, max_time, [cell dimensions] e.g. for
+        #   GraphLSTMCell: input_size
+        #   GraphLSTMNet: number_of_nodes, input_size
+
+        # return value of GraphLSTMNet: graph_output, new_states
+        # return value of DummyFixedTfCell: output, (state, output)
+        # return value of DummyReturnTfCell: input, state
+        # return value of dynamic_rnn: output [number_of_nodes, batch_size, max_time, cell.output_size],
+        #   final_state [number_of_nodes, state_size (2 for LSTM), batch_size, output_size]
+
+        cell_inputs_values = np.random.rand(batch_size, time_steps, glstm_cell.output_size)
+        cell_inputs = tf.placeholder(tf.float32, cell_inputs_values.shape)
+
+        neighbour_state_1_values_c = np.random.rand(batch_size, num_units)
+        neighbour_state_1_values_h = np.random.rand(batch_size, num_units)
+        neighbour_state_2_values_c = np.random.rand(batch_size, num_units)
+        neighbour_state_2_values_h = np.random.rand(batch_size, num_units)
+
+        # not explicitly converting with dtype=tf.float32 destroys the whole testsuite in weird ways,
+        # inflicting errors in parts not at all connected to this one
+
+        state_neighbour_1_t4 = glstm.LSTMStateTuple(tf.convert_to_tensor(neighbour_state_1_values_c, dtype=tf.float32),
+                                                    tf.convert_to_tensor(neighbour_state_1_values_h, dtype=tf.float32))
+        state_neighbour_2_t4 = glstm.LSTMStateTuple(tf.convert_to_tensor(neighbour_state_2_values_c, dtype=tf.float32),
+                                                    tf.convert_to_tensor(neighbour_state_2_values_h, dtype=tf.float32))
+
+        cell_neighbour_states_t4 = (state_neighbour_1_t4, state_neighbour_2_t4)
+
+        expected_output = -cell_inputs_values
+        # state shape: state_size 2, batch_size 2, output_size 3
+        expected_final_state = np.sum([[neighbour_state_1_values_c, neighbour_state_1_values_h],
+                                       [neighbour_state_2_values_c, neighbour_state_2_values_h]], axis=0) * time_steps
+
+        helper_net = DummyNeighbourHelperNet(glstm_cell, cell_neighbour_states_t4)
+
+        with self.test_session() as sess:
+
             return_tensor = tf.nn.dynamic_rnn(helper_net, cell_inputs, dtype=tf.float32)
 
             actual_result = sess.run(return_tensor, feed_dict={cell_inputs: cell_inputs_values})
