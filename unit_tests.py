@@ -164,6 +164,23 @@ class DummyNeighbourHelperNet(orig_rci.RNNCell):
         return self._cell(inputs, state, self._neighbour_states)
 
 
+# for overriding _graphlstm_linear in graph_lstm.py, returns vector of 'value' of expected output size
+class DummyGraphlstmLinear:
+    def __init__(self, value):
+        self._value = value
+
+    def __call__(self, weight_names, args, output_size, bias, **kwargs):
+        from tensorflow.python.util import nest
+        if args is None or (nest.is_sequence(args) and not args):
+            raise ValueError("`args` must be specified")
+        if not nest.is_sequence(args):
+            args = [args]
+        dtype = [a.dtype for a in args][0]
+        shape = [args[0].get_shape()[0].value, output_size]
+
+        return tf.zeros(shape=shape, dtype=dtype) + self._value
+
+
 class TestGraphLSTMNet(tf.test.TestCase):
 
     def setUp(self):
@@ -592,13 +609,18 @@ class TestGraphLSTMNet(tf.test.TestCase):
             np.testing.assert_allclose(rcn_cdab_actual_result[0], rcn_cdab_t4_expected_output, err_msg=msg)
             np.testing.assert_allclose(rcn_cdab_actual_result[1], rcn_cdab_t4_expected_final_state, err_msg=msg)
 
-def _graphlstm_linear(*args, **kwargs):  # todo override method in graph_lstm.py while calling cell, or find other way
-    print("This is the new _graphlstm_linear method")
 
 class TestGraphLSTMCell(tf.test.TestCase):
 
     def setUp(self):
         self.longMessage = True
+        # store original _graphlstm_linear method for restoring glstm import after test
+        from graph_lstm import _graphlstm_linear as original_graphlstm_linear
+        self._original_graphlstm_linear = original_graphlstm_linear
+
+    def tearDown(self):
+        # restore original _graphlstm_linear method
+        glstm._graphlstm_linear = self._original_graphlstm_linear
 
     def test_init_and___call__(self):
         cell_name = "testcell"
@@ -657,6 +679,10 @@ class TestGraphLSTMCell(tf.test.TestCase):
             np.testing.assert_allclose(actual_result[1], expected_final_state)
 
     def test_call(self):
+        # patch _graphlstm_linear method to stub for this test
+        glstm._graphlstm_linear = DummyGraphlstmLinear(0)
+        # todo: compute expected values, then assert results. then hunt bug in GraphLSTMCell when using original _graphlstm_linear
+
         num_units = 3
         batch_size = 2
         time_steps = 4
