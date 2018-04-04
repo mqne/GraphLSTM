@@ -180,6 +180,19 @@ class DummyGraphlstmLinear:
 
         return tf.zeros(shape=shape, dtype=dtype) + self._value
 
+    def get_expected_state(self, t, batch_size, num_units, neighbours_m_values):
+        m = self._m_it_recursive(t, batch_size, num_units, neighbours_m_values)
+        h = np.tanh(sigmoid(self._value) * m)
+        return orig_rci.LSTMStateTuple(m, h)
+
+    def _m_it_recursive(self, t, batch_size, num_units, neighbours_m_values):
+        if t <= 0:
+            return np.zeros([batch_size, num_units])
+        return sigmoid(self._value) * (
+                np.average(neighbours_m_values, axis=0)
+                + self._m_it_recursive(t - 1, batch_size, num_units, neighbours_m_values)
+                + np.tanh(self._value))
+
 
 class TestGraphLSTMNet(tf.test.TestCase):
 
@@ -678,10 +691,10 @@ class TestGraphLSTMCell(tf.test.TestCase):
             np.testing.assert_allclose(actual_result[0], expected_output)
             np.testing.assert_allclose(actual_result[1], expected_final_state)
 
-    def test_call(self):
+    def test_call_without__graphlstm_linear(self):
         # patch _graphlstm_linear method to stub for this test
-        glstm._graphlstm_linear = DummyGraphlstmLinear(0)
-        # todo: compute expected values, then assert results. then hunt bug in GraphLSTMCell when using original _graphlstm_linear
+        glstm._graphlstm_linear = DummyGraphlstmLinear((np.random.randn() - .5) * 20)
+        # todo: hunt bug in GraphLSTMCell when using original _graphlstm_linear
 
         num_units = 3
         batch_size = 2
@@ -721,21 +734,33 @@ class TestGraphLSTMCell(tf.test.TestCase):
 
         cell_neighbour_states_t4 = (state_neighbour_1_t4, state_neighbour_2_t4)
 
-        expected_output = -cell_inputs_values
+        expected_m = 0.9375 * np.ones_like(neighbour_state_1_values_c)
+        expected_h = np.tanh(0.5 * expected_m)
+        expected_output = np.tanh(0.5 * 0.9375) * np.ones([batch_size, time_steps, num_units])
+
         # state shape: state_size 2, batch_size 2, output_size 3
         expected_final_state = np.sum([[neighbour_state_1_values_c, neighbour_state_1_values_h],
                                        [neighbour_state_2_values_c, neighbour_state_2_values_h]], axis=0) * time_steps
+        expected_final_state = glstm._graphlstm_linear.get_expected_state(time_steps, batch_size, num_units,
+                                                                          [neighbour_state_1_values_c,
+                                                                           neighbour_state_2_values_c])
+        expected_output = np.swapaxes([glstm._graphlstm_linear.get_expected_state(t, batch_size, num_units,
+                                                                                  [neighbour_state_1_values_c,
+                                                                                   neighbour_state_2_values_c])[1]
+                                       for t in range(1, time_steps + 1)], 0, 1)
 
         helper_net = DummyNeighbourHelperNet(glstm_cell, cell_neighbour_states_t4)
 
         with self.test_session() as sess:
-
             return_tensor = tf.nn.dynamic_rnn(helper_net, cell_inputs, dtype=tf.float32)
 
             actual_result = sess.run(return_tensor, feed_dict={cell_inputs: cell_inputs_values})
 
-            np.testing.assert_allclose(actual_result[0], expected_output)
-            np.testing.assert_allclose(actual_result[1], expected_final_state)
+            err_msg = "Possibly helpful for debugging: _graphlstm_linear return value was set to %f" % \
+                      glstm._graphlstm_linear._value
+
+            np.testing.assert_allclose(actual_result[0], expected_output, atol=1e-5, err_msg=err_msg)
+            np.testing.assert_allclose(actual_result[1], expected_final_state, atol=1e-5, err_msg=err_msg)
 
 
 class TestGraphLSTMCellAndNet(tf.test.TestCase):
@@ -877,6 +902,10 @@ def plot_nxgraph(net):
     plt.subplot()
     nx.draw(net._nxgraph, with_labels=True)
     plt.show()
+
+
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
 
 
 # return tuple of n objects
