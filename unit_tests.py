@@ -694,7 +694,6 @@ class TestGraphLSTMCell(tf.test.TestCase):
     def test_call_without__graphlstm_linear(self):
         # patch _graphlstm_linear method to stub for this test
         glstm._graphlstm_linear = DummyGraphlstmLinear((np.random.randn() - .5) * 20)
-        # todo: hunt bug in GraphLSTMCell when using original _graphlstm_linear
 
         num_units = 3
         batch_size = 2
@@ -734,13 +733,7 @@ class TestGraphLSTMCell(tf.test.TestCase):
 
         cell_neighbour_states_t4 = (state_neighbour_1_t4, state_neighbour_2_t4)
 
-        expected_m = 0.9375 * np.ones_like(neighbour_state_1_values_c)
-        expected_h = np.tanh(0.5 * expected_m)
-        expected_output = np.tanh(0.5 * 0.9375) * np.ones([batch_size, time_steps, num_units])
-
         # state shape: state_size 2, batch_size 2, output_size 3
-        expected_final_state = np.sum([[neighbour_state_1_values_c, neighbour_state_1_values_h],
-                                       [neighbour_state_2_values_c, neighbour_state_2_values_h]], axis=0) * time_steps
         expected_final_state = glstm._graphlstm_linear.get_expected_state(time_steps, batch_size, num_units,
                                                                           [neighbour_state_1_values_c,
                                                                            neighbour_state_2_values_c])
@@ -761,6 +754,10 @@ class TestGraphLSTMCell(tf.test.TestCase):
 
             np.testing.assert_allclose(actual_result[0], expected_output, atol=1e-5, err_msg=err_msg)
             np.testing.assert_allclose(actual_result[1], expected_final_state, atol=1e-5, err_msg=err_msg)
+
+    def test_call_full(self):
+        # todo: hunt bug in GraphLSTMCell when using original _graphlstm_linear
+        pass
 
 
 class TestGraphLSTMCellAndNet(tf.test.TestCase):
@@ -904,6 +901,7 @@ def plot_nxgraph(net):
     plt.show()
 
 
+# calculate sigmoid(x). Note: this implementation is for testing purposes only and should NOT be used for critical code!
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
