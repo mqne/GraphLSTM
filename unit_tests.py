@@ -795,9 +795,9 @@ class TestGraphLSTMCell(tf.test.TestCase):
 
     def test_call_full(self):
 
-        num_units = 300
-        batch_size = 200
-        time_steps = 400
+        num_units = 3
+        batch_size = 2
+        time_steps = 4
 
         glstm_cell = glstm.GraphLSTMCell(num_units)
 
