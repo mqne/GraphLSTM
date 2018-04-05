@@ -194,6 +194,48 @@ class DummyGraphlstmLinear:
                 + np.tanh(self._value))
 
 
+# this is basically a numpy implementation of a GraphLSTM cell with fixed weights for cross-verification
+def get_expected_state_full(cell_input, t, batch_size, num_units, neighbours_m_values, neighbours_h_values):
+
+        if t <= 0:
+            return orig_rci.LSTMStateTuple(np.zeros([batch_size, num_units]), np.zeros([batch_size, num_units]))
+
+        # these values depend on the initializers in TestGraphLSTMCell.test_call_full
+        w_u = 1
+        w_f = 2
+        w_c = 3
+        w_o = 4
+        u_u = 5
+        u_f = 6
+        u_c = 7
+        u_o = 8
+        u_un = 9
+        u_fn = 10
+        u_cn = 11
+        u_on = 12
+        b_u = -12
+        b_f = -11
+        b_c = -10
+        b_o = -9
+
+        h_avg = np.average(neighbours_h_values, axis=0)
+
+        m_old, h_old = get_expected_state_full(cell_input, t - 1, batch_size, num_units,
+                                               neighbours_m_values, neighbours_h_values)
+
+        g_f = sigmoid(cell_input[:, t - 1] * w_f + h_old * u_f + b_f)
+        g_u = sigmoid(cell_input[:, t - 1] * w_u + h_old * u_u + h_avg * u_un + b_u)
+        g_o = sigmoid(cell_input[:, t - 1] * w_o + h_old * u_o + h_avg * u_on + b_o)
+        g_c = np.tanh(cell_input[:, t - 1] * w_c + h_old * u_c + h_avg * u_cn + b_c)
+
+        m = np.average([sigmoid(cell_input[:, t - 1] * w_f + h_j * u_fn + b_f) * m_j
+                        for m_j, h_j in zip(neighbours_m_values, neighbours_h_values)], axis=0) \
+            + g_f * m_old + g_u * g_c
+        h = np.tanh(g_o * m)
+
+        return orig_rci.LSTMStateTuple(m, h)
+
+
 class TestGraphLSTMNet(tf.test.TestCase):
 
     def setUp(self):
@@ -752,13 +794,10 @@ class TestGraphLSTMCell(tf.test.TestCase):
             np.testing.assert_allclose(actual_result[1], expected_final_state, atol=1e-5, err_msg=err_msg)
 
     def test_call_full(self):
-        # todo: hunt bug in GraphLSTMCell when using original _graphlstm_linear
 
-        state_predictor = DummyGraphlstmLinear(1).get_expected_state
-
-        num_units = 3
-        batch_size = 2
-        time_steps = 4
+        num_units = 300
+        batch_size = 200
+        time_steps = 400
 
         glstm_cell = glstm.GraphLSTMCell(num_units)
 
@@ -776,13 +815,13 @@ class TestGraphLSTMCell(tf.test.TestCase):
         # return value of dynamic_rnn: output [number_of_nodes, batch_size, max_time, cell.output_size],
         #   final_state [number_of_nodes, state_size (2 for LSTM), batch_size, output_size]
 
-        cell_inputs_values = np.zeros([batch_size, time_steps, glstm_cell.output_size])  # np.random.rand(batch_size, time_steps, glstm_cell.output_size)
+        cell_inputs_values = np.random.rand(batch_size, time_steps, glstm_cell.output_size)
         cell_inputs = tf.placeholder(tf.float32, cell_inputs_values.shape)
 
-        neighbour_state_1_values_c = np.ones([batch_size, num_units])
-        neighbour_state_1_values_h = np.ones([batch_size, num_units])
-        neighbour_state_2_values_c = np.ones([batch_size, num_units])
-        neighbour_state_2_values_h = np.ones([batch_size, num_units])  # np.random.rand(batch_size, num_units)
+        neighbour_state_1_values_c = np.random.rand(batch_size, num_units)
+        neighbour_state_1_values_h = np.random.rand(batch_size, num_units)
+        neighbour_state_2_values_c = np.random.rand(batch_size, num_units)
+        neighbour_state_2_values_h = np.random.rand(batch_size, num_units)
 
         # not explicitly converting with dtype=tf.float32 destroys the whole testsuite in weird ways,
         # inflicting errors in parts not at all connected to this one
@@ -795,31 +834,58 @@ class TestGraphLSTMCell(tf.test.TestCase):
         cell_neighbour_states_t4 = (state_neighbour_1_t4, state_neighbour_2_t4)
 
         # state shape: state_size 2, batch_size 2, output_size 3
-        expected_final_state = state_predictor(time_steps, batch_size, num_units, [neighbour_state_1_values_c,
-                                                                                   neighbour_state_2_values_c])
-        expected_output = np.swapaxes([state_predictor(t, batch_size, num_units, [neighbour_state_1_values_c,
-                                                                                  neighbour_state_2_values_c])[1]
+        expected_final_state = get_expected_state_full(cell_inputs_values, time_steps, batch_size, num_units,
+                                                       [neighbour_state_1_values_c, neighbour_state_2_values_c],
+                                                       [neighbour_state_1_values_h, neighbour_state_2_values_h])
+        expected_output = np.swapaxes([get_expected_state_full(cell_inputs_values, t, batch_size, num_units,
+                                                               [neighbour_state_1_values_c, neighbour_state_2_values_c],
+                                                               [neighbour_state_1_values_h, neighbour_state_2_values_h]
+                                                               )[1]
                                        for t in range(1, time_steps + 1)], 0, 1)
 
         helper_net = DummyNeighbourHelperNet(glstm_cell, cell_neighbour_states_t4)
 
-        # initialize weights to specific values todo
-
+        # initialize weights to specific values
         scope = tf.get_variable_scope()
-        with tf.variable_scope(scope, reuse=True) as local_scope:
-            local_scope.set_initializer(tf.ones_initializer)  # todo: obsolete? to be replaced?
+        # note: the scope name is sensitive to changes in the architecture of the test
+        with tf.variable_scope("rnn/dummy_neighbour_helper_net/graph_lstm_cell") as init_scope:
+
+            # weight and bias names (copied from GraphLSTMCell.call) # and values
+            weights = [
+                "W_u",    # 1
+                "W_f",    # 2
+                "W_c",    # 3
+                "W_o",    # 4
+                "U_u",    # 5
+                "U_f",    # 6
+                "U_c",    # 7
+                "U_o",    # 8
+                "U_un",   # 9
+                "U_fn",  # 10
+                "U_cn",  # 11
+                "U_on"]  # 12
+            biases = [
+                "b_u",  # -12
+                "b_f",  # -11
+                "b_c",  # -10
+                "b_o"]   # -9
+
+            # initialize variables via tf.get_variable()
+            for i, w in enumerate(weights):
+                tf.get_variable(name=w, shape=[num_units, num_units], initializer=tf.initializers.identity(i+1))
+            for i, b in enumerate(biases):
+                tf.get_variable(name=b, shape=[num_units], initializer=tf.constant_initializer(i-12))
+
+        # force reuse=True for all variables in order to use variables as initialized above
+        with tf.variable_scope(scope, reuse=True) as reuse_scope:
             with self.test_session() as sess:
                 return_tensor = tf.nn.dynamic_rnn(helper_net, cell_inputs, dtype=tf.float32)
 
                 tf.global_variables_initializer().run()
                 actual_result = sess.run(return_tensor, feed_dict={cell_inputs: cell_inputs_values})
 
-                # err_msg = "Possibly helpful for debugging: _graphlstm_linear return value was set to %f" % \
-                #           glstm._graphlstm_linear._value
-                err_msg = "stub"
-
-                np.testing.assert_allclose(actual_result[0], expected_output, atol=1e-5, err_msg=err_msg)
-                np.testing.assert_allclose(actual_result[1], expected_final_state, atol=1e-5, err_msg=err_msg)
+                np.testing.assert_allclose(actual_result[0], expected_output, rtol=1e-4)
+                np.testing.assert_allclose(actual_result[1], expected_final_state, rtol=1e-4)
 
 
 class TestGraphLSTMCellAndNet(tf.test.TestCase):

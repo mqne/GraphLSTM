@@ -50,7 +50,7 @@ class DummyReturnTfCell(glstm.RNNCell):
 
 def main(*argv):
 
-    sess = tf.Session()
+    sess = tf.InteractiveSession()
 
     x = tf.constant([[1., 2.], [3., 4.]])
     x1 = tf.constant([[1., 2.], [3., 4.]])
@@ -101,6 +101,9 @@ def main(*argv):
 
     input_data = tf.placeholder(tf.float32, [None, None, 3])
 
+    w = tf.get_variable(
+        name="w_name", shape=[3,2], initializer=tf.initializers.identity(2+1)
+    )
     sess.run(tf.global_variables_initializer())
     # print(sess.run({'result': result}))
     r = sess.run({"*": xy1, "multiply": xy2, "matmul": xy3})
@@ -114,6 +117,8 @@ def main(*argv):
     print(sess.run(tf.nn.dynamic_rnn(drtcell1, input_data, dtype=tf.float32), feed_dict={input_data: [[[1, 19, 3]]]}))
 
     print(glstm.GraphLSTMNet.is_valid_nxgraph(nx.Graph(), raise_errors=False))
+
+    print(w.eval())
 
 class LSM(unittest.TestCase):
     def setUp(self):
