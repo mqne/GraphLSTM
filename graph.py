@@ -1,7 +1,7 @@
 import networkx as nx
 
 # for Graph visualisation
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 
 def plot_graph(g):

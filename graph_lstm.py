@@ -216,7 +216,7 @@ class GraphLSTMCell(RNNCell):
                                          reuse_weights=[w_f, b_f]))
         # output gate
         # g_o = sigmoid ( f_{i,t+1} * W_o + h_{i,t} * U_o + h^-_{i,t} * U_{on} + b_o )
-        g_o = sigmoid(_graphlstm_linear([w_o, u_o, u_on, b_o], [inputs, h_i, h_j_avg], self.output_size, True))  # todo debug here
+        g_o = sigmoid(_graphlstm_linear([w_o, u_o, u_on, b_o], [inputs, h_i, h_j_avg], self.output_size, True))
         # memory gate
         # g_c = tanh ( f_{i,t+1} * W_c + h_{i,t} * U_c + h^-_{i,t} * U_{cn} + b_c )
         g_c = tanh(_graphlstm_linear([w_c, u_c, u_cn, b_c], [inputs, h_i, h_j_avg], self.output_size, True))
@@ -336,7 +336,8 @@ class GraphLSTMNet(RNNCell):
                     if num_units < 1:
                         raise ValueError("num_units must be a positive integer, but found: %i" % num_units)
                     num_units_type_checked_flag = True
-                nxgraph.nodes[node_name][_CELL] = GraphLSTMCell(num_units, name="GraphLSTMCell_" + str(node_name), **graphlstmcell_kwargs)
+                nxgraph.nodes[node_name][_CELL] = GraphLSTMCell(num_units, name="GraphLSTMCell_" + str(node_name),
+                                                                **graphlstmcell_kwargs)
         if verify and not GraphLSTMNet.is_valid_nxgraph(nxgraph, raise_errors=False, ignore_cell_type=ignore_cell_type,
                                                         allow_selfloops=allow_selfloops):
             logging.warn("Created nxgraph did not pass validity test. "
@@ -545,7 +546,8 @@ class GraphLSTMNet(RNNCell):
         graph_output = [None] * self._nxgraph.number_of_nodes()
 
         # iterate over cells in graph, starting with highest confidence value
-        for node_name, node_obj in sorted(self._nxgraph.nodes(data=True), key=lambda x: x[1][_CONFIDENCE], reverse=True):
+        for node_name, node_obj in sorted(self._nxgraph.nodes(data=True), key=lambda x: x[1][_CONFIDENCE],
+                                          reverse=True):
             # TODO variable scope to include graphLSTM name/instance-id/or similar
             with vs.variable_scope("cell_%s" % node_name):  # TODO: variable scope here? in other places?
                 # extract GraphLSTMCell object from graph node
