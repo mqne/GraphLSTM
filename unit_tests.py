@@ -34,7 +34,7 @@ class DummyFixedCell(orig_rci.RNNCell):
     def output_size(self):
         return None
 
-    def call(self, inputs, state, neighbour_states):
+    def call(self, inputs, state, neighbour_states, cell_scope):
         return self._returnValue
 
 
@@ -56,7 +56,7 @@ class DummyFixedTfCell(orig_rci.RNNCell):
         return self._num_units
 
     # get neighbour_states from net without embedding it in the state itself
-    def __call__(self, inputs, state, neighbour_states, *args, **kwargs):
+    def __call__(self, inputs, state, neighbour_states, cell_scope, *args, **kwargs):
         self._neighbour_states = neighbour_states
         return super(DummyFixedTfCell, self).__call__(inputs, state, *args, **kwargs)
 
@@ -81,7 +81,7 @@ class DummyReturnCell(orig_rci.RNNCell):
     def output_size(self):
         return None
 
-    def call(self, inputs, state, neighbour_states):
+    def call(self, inputs, state, neighbour_states, cell_scope):
         return (inputs, state, neighbour_states), (neighbour_states, state, inputs)
 
 
@@ -105,7 +105,7 @@ class DummyReturnTfCell(orig_rci.RNNCell):
         return self._num_units
 
     # get neighbour_states from net without embedding them in the state itself
-    def __call__(self, inputs, state, neighbour_states, *args, **kwargs):
+    def __call__(self, inputs, state, neighbour_states, cell_scope, *args, **kwargs):
         self._neighbour_states = neighbour_states
         return super(DummyReturnTfCell, self).__call__(inputs, state, *args, **kwargs)
 
@@ -131,6 +131,7 @@ class DummyReturnTfGLSTMCell(glstm.GraphLSTMCell):
     # testing state_size, output_size and __call__ by not overriding them
 
     def call(self, inputs, state):
+        print("Scope in DummyReturnTfGLSTMCell.call: " + tf.get_variable_scope().name)  # todo remove
         # same as DummyReturnTfCell.call(self, inputs, state) with addition of own state each timestep
         if self._return_sum_of_neighbour_states:
             state = glstm.LSTMStateTuple(tf.add_n([m for m, h in self._neighbour_states]) + state[0],
@@ -161,7 +162,7 @@ class DummyNeighbourHelperNet(orig_rci.RNNCell):
         return self._cell.zero_state(batch_size, dtype)
 
     def call(self, inputs, state):
-        return self._cell(inputs, state, self._neighbour_states)
+        return self._cell(inputs, state, self._neighbour_states, tf.get_variable_scope())
 
 
 # for overriding _graphlstm_linear in graph_lstm.py, returns vector of 'value' of expected output size
@@ -937,6 +938,63 @@ class TestGraphLSTMCellAndNet(tf.test.TestCase):
             nxgraph.node['d'][_CELL] = return_neighbour_cell_d
 
             rcn_cdab_returned_tensors = tf.nn.dynamic_rnn(net, input_data_rcn_cdab, dtype=tf.float32)
+
+            self.assertEqual(len(rcn_cdab_returned_tensors[0]), len(nxgraph),
+                             msg="GraphLSTMNet should return %i outputs (equaling number of nodes), but returned %i"
+                                 % (len(nxgraph), len(rcn_cdab_returned_tensors[0])))
+
+            # test batch size 2, 4 timesteps
+            rcn_cdab_actual_result = sess.run(rcn_cdab_returned_tensors, feed_dict=feed_dict_rcn_cdab_t4)
+
+            np.testing.assert_allclose(rcn_cdab_actual_result[0], rcn_cdab_t4_expected_output)
+            np.testing.assert_allclose(rcn_cdab_actual_result[1], rcn_cdab_t4_expected_final_state)
+
+    @unittest.skip
+    def test_full_cell_in_full_net(self):
+        # basically repeat the last test from TestGraphLSTMNet.test_call_multinodal_tf
+        # with real GraphLSTMCells
+
+        # update order: c, d, a, b
+        nxgraph = glstm.GraphLSTMNet.create_nxgraph([['a', 'b'], ['b', 'c'], ['b', 'd'], ['c', 'd']], 1,
+                                                    confidence_dict={"c": 1, "d": 0.9, "a": .6, "b": -2})
+        net = glstm.GraphLSTMNet(nxgraph, shared_weights=True)
+
+        # make return cells with inter-neighbour communication
+        # c increases its state by 1 each timestep, starting from 0
+        # a, b and d return the sum of their neighbouring states
+        return_neighbour_cell_a = DummyReturnTfGLSTMCell(2, return_sum_of_neighbour_states=True)
+        return_neighbour_cell_b = DummyReturnTfGLSTMCell(2, return_sum_of_neighbour_states=True)
+        return_neighbour_cell_c = DummyReturnTfGLSTMCell(2, add_one_to_state_per_timestep=True)
+        return_neighbour_cell_d = DummyReturnTfGLSTMCell(2, return_sum_of_neighbour_states=True)
+
+        # input size 2, 4 nodes: [? ? 4 2]
+        input_data_rcn_cdab = tf.placeholder(tf.float32, [None, None, 4, 2])
+
+        # time sequence of state values:
+        #   t   a   b   c   d
+        #   1   0   2   1   1
+        #   2   2   11  2   5
+        #   3   13  46  3   19
+        #   4   59  178 4   69
+
+        # batch size 2, 4 timesteps, number_of_nodes 4, input/output size 2: [2 4 4 2]
+        rcn_cdab_t4_values = np.random.rand(2, 4, 4, 2)
+        feed_dict_rcn_cdab_t4 = {input_data_rcn_cdab: rcn_cdab_t4_values}
+        # state shape: number_of_nodes 4, state_size 2, batch_size 2, output_size 3
+        rcn_cdab_t4_expected_output = -np.swapaxes(np.swapaxes(rcn_cdab_t4_values, 0, 2), 1, 2)
+        rcn_cdab_t4_expected_final_state = (
+            np.zeros([2, 2, 2]) + 59, np.zeros([2, 2, 2]) + 178, np.zeros([2, 2, 2]) + 4, np.zeros([2, 2, 2]) + 69)
+
+        with self.test_session() as sess:
+            # inject neighbour-aware return cells into network graph
+            # nxgraph.node['a'][_CELL] = return_neighbour_cell_a
+            # nxgraph.node['b'][_CELL] = return_neighbour_cell_b
+            # nxgraph.node['c'][_CELL] = return_neighbour_cell_c
+            # nxgraph.node['d'][_CELL] = return_neighbour_cell_d
+
+            rcn_cdab_returned_tensors = tf.nn.dynamic_rnn(net, input_data_rcn_cdab, dtype=tf.float32)
+
+            tf.global_variables_initializer()
 
             self.assertEqual(len(rcn_cdab_returned_tensors[0]), len(nxgraph),
                              msg="GraphLSTMNet should return %i outputs (equaling number of nodes), but returned %i"

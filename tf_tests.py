@@ -5,6 +5,7 @@ import numpy as np
 import networkx as nx
 import tensorflow.python.user_ops.user_ops
 
+
 class DummyFixedTfCell(glstm.RNNCell):
     def __init__(self, num_units=1, memory_state=((2.,),), hidden_state=((3.,),), state_is_tuple=True):
         if not state_is_tuple:
@@ -26,13 +27,15 @@ class DummyFixedTfCell(glstm.RNNCell):
         #return inputs, (inputs, inputs)
         return self._h, (self._m, self._h)
 
+
 class DummyReturnTfCell(glstm.RNNCell):
-    def __init__(self, num_units, state_is_tuple=True, return_sum_of_neighbour_states=False):
+    def __init__(self, num_units, state_is_tuple=True, return_sum_of_neighbour_states=False, scope=None):
         if not state_is_tuple:
             raise NotImplementedError("DummyFixedTfCell is only defined for state_is_tuple=True")
         super(DummyReturnTfCell, self).__init__()
         self._num_units = num_units
         self._return_sum_of_neighbour_states = return_sum_of_neighbour_states
+        self._custom_scope = scope
 
     @property
     def state_size(self):
@@ -43,9 +46,11 @@ class DummyReturnTfCell(glstm.RNNCell):
         return self._num_units
 
     def call(self, inputs, state, neighbour_states=None):
-        if self._return_sum_of_neighbour_states:
-            state = tf.add_n([m for m, h in neighbour_states]), tf.add_n([h for m, h in neighbour_states])
-        return inputs, tuple(x+1 for x in state)
+        with tf.variable_scope(self._custom_scope):
+            print(tf.get_variable_scope().name)
+            if self._return_sum_of_neighbour_states:
+                state = tf.add_n([m for m, h in neighbour_states]), tf.add_n([h for m, h in neighbour_states])
+            return inputs, tuple(x+1 for x in state)
 
 
 def main(*argv):
@@ -97,28 +102,32 @@ def main(*argv):
     gr = nx.Graph()
     gr.add_node("test")
     dftcell1 = DummyFixedTfCell(num_units=1)
-    drtcell1 = DummyReturnTfCell(num_units=3)
+    with tf.variable_scope("outer_scope"):
+        with tf.variable_scope("intermediate_scope") as intermediate_scope:
+            with tf.variable_scope("inner_scope"):
+                drtcell1 = DummyReturnTfCell(num_units=3, scope=intermediate_scope)
 
-    input_data = tf.placeholder(tf.float32, [None, None, 3])
+                input_data = tf.placeholder(tf.float32, [None, None, 3])
 
-    w = tf.get_variable(
-        name="w_name", shape=[3,2], initializer=tf.initializers.identity(2+1)
-    )
-    sess.run(tf.global_variables_initializer())
-    # print(sess.run({'result': result}))
-    r = sess.run({"*": xy1, "multiply": xy2, "matmul": xy3})
-    print(xy1)
-    print(xy2)
-    print(xy3)
-    print(np.array_equal(r["*"], r["multiply"]))
+                w = tf.get_variable(
+                    name="w_name", shape=[3,2], initializer=tf.initializers.identity(2+1)
+                )
+                sess.run(tf.global_variables_initializer())
+                # print(sess.run({'result': result}))
+                r = sess.run({"*": xy1, "multiply": xy2, "matmul": xy3})
+                print(xy1)
+                print(xy2)
+                print(xy3)
+                print(np.array_equal(r["*"], r["multiply"]))
 
-    #print(sess.run(tf.nn.dynamic_rnn(dftcell1, input_data, initial_state=tf.ones([2,3])), feed_dict={input_data: [[[1, 5, 6]]]}))
-    print(sess.run(tf.nn.dynamic_rnn(drtcell1, input_data, dtype=tf.float32), feed_dict={input_data: [[[1, 19, 3], [1, 19, 3]]]}))
-    print(sess.run(tf.nn.dynamic_rnn(drtcell1, input_data, dtype=tf.float32), feed_dict={input_data: [[[1, 19, 3]]]}))
+                #print(sess.run(tf.nn.dynamic_rnn(dftcell1, input_data, initial_state=tf.ones([2,3])), feed_dict={input_data: [[[1, 5, 6]]]}))
+                print(sess.run(tf.nn.dynamic_rnn(drtcell1, input_data, dtype=tf.float32), feed_dict={input_data: [[[1, 19, 3], [1, 19, 3]]]}))
+                print(sess.run(tf.nn.dynamic_rnn(drtcell1, input_data, dtype=tf.float32), feed_dict={input_data: [[[1, 19, 3]]]}))
 
-    print(glstm.GraphLSTMNet.is_valid_nxgraph(nx.Graph(), raise_errors=False))
+                print(glstm.GraphLSTMNet.is_valid_nxgraph(nx.Graph(), raise_errors=False))
 
-    print(w.eval())
+                print(w.eval())
+
 
 class LSM(unittest.TestCase):
     def setUp(self):

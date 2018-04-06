@@ -37,6 +37,31 @@ _CELL = "cell"
 _CONFIDENCE = "confidence"
 _INDEX = "index"
 
+# templates for which weights should be shared between cells
+ALL_LOCAL = []
+ALL_GLOBAL = [
+    "W_u",
+    "W_f",
+    "W_c",
+    "W_o",
+    "U_u",
+    "U_f",
+    "U_c",
+    "U_o",
+    "U_un",
+    "U_fn",
+    "U_cn",
+    "U_on",
+    "b_u",
+    "b_f",
+    "b_c",
+    "b_o"]
+NEIGHBOUR_CONNECTIONS_GLOBAL = [
+    "U_un",
+    "U_fn",
+    "U_cn",
+    "U_on"]
+
 
 class GraphLSTMCell(RNNCell):
     """Graph LSTM recurrent network cell.
@@ -103,7 +128,7 @@ class GraphLSTMCell(RNNCell):
     def output_size(self):
         return self._num_units
 
-    def __call__(self, inputs, state, neighbour_states, *args, **kwargs):
+    def __call__(self, inputs, state, neighbour_states, net_scope, *args, **kwargs):
         """Store neighbour_states as cell variable and call superclass.
 
         `__call__` is the function called by tensorflow's `dynamic_rnn`.
@@ -128,6 +153,7 @@ class GraphLSTMCell(RNNCell):
             `state_is_tuple`).
         """
         self._neighbour_states = neighbour_states
+        self._net_scope = net_scope
         return super(GraphLSTMCell, self).__call__(inputs, state, *args, **kwargs)
 
     def call(self, inputs, state):
@@ -163,9 +189,7 @@ class GraphLSTMCell(RNNCell):
         # neighbours. However, we want cells specifically trained for certain joint, so information about which
         # neighbouring cell belongs to which node might be interesting ... kind of a "hard wired" Graph LSTM
         # But: that's good! -> Own contribution, learn generic hand model / even learn individual hand sizes?
-        # TODO: first implement regular Graph LSTM, then test, then hand-specific version
-
-        # TODO: unit tests for GraphLSTMCell.call
+        # TODO: maybe implement hand-specific version
 
         # self._neighbour_states: a list of n `LSTMStateTuples` of state tensors (m_j, h_j)
         if not hasattr(self, "_neighbour_states"):
@@ -389,7 +413,7 @@ class GraphLSTMNet(RNNCell):
                     node_attr_lookuperr = "_CONFIDENCE"
                 if node_attr_lookuperr is not None:
                     raise KeyError("Node '%s' has no attribute %s" % (node_name, node_attr_lookuperr))
-                if not ignore_cell_type:
+                if not ignore_cell_type:  # todo: verify same output size for all cells
                     if not isinstance(nxgraph.nodes[node_name][_CELL], GraphLSTMCell):
                         raise TypeError("Cell of node '%s' is not a GraphLSTMCell. "
                                         "If this is expected, consider running is_valid_nxgraph with "
@@ -447,7 +471,8 @@ class GraphLSTMNet(RNNCell):
                              % (len(output.shape), output.shape))
         return array_ops.transpose(output, perm)
 
-    def __init__(self, nxgraph, num_units=None, state_is_tuple=True, name=None):
+    def __init__(self, nxgraph, num_units=None, state_is_tuple=True, shared_weights=ALL_GLOBAL,
+                 weight_initializer=None, bias_initializer=None, name=None):
         """Create a Graph LSTM Network composed of a graph of GraphLSTMCells.
 
         Args:
@@ -457,6 +482,8 @@ class GraphLSTMNet(RNNCell):
             `n = len(cells)`.  If False, the states are all
             concatenated along the column axis.  This latter behavior will soon be
             deprecated.
+          shared_weights: A list of the weights that will be shared between all cells.
+            Default: ALL_GLOBAL.
 
         Raises:
           ValueError: If nxgraph is not valid, or at least one of the cells
@@ -482,6 +509,9 @@ class GraphLSTMNet(RNNCell):
 
         self._nxgraph = nxgraph
         self._state_is_tuple = state_is_tuple
+        self._shared_weights = shared_weights
+        self._weight_initializer = weight_initializer
+        self._bias_initializer = bias_initializer
         if not state_is_tuple:
             if any(nest.is_sequence(self._cell(n).state_size) for n in self._nxgraph):
                 raise ValueError("Some cells return tuples of states, but the flag "
@@ -528,28 +558,32 @@ class GraphLSTMNet(RNNCell):
             raise ValueError("Number of nodes in GraphLSTMNet input (%d) does not match number of graph nodes (%d)" %
                              (inputs.shape[-2], self._nxgraph.number_of_nodes()))
 
-        # # DEPRECATED: 'inputs' is not a tuple but a tensor
-        # # check if input size matches expected size
-        # if len(inputs) is not self._nxgraph.number_of_nodes():
-        #     raise ValueError("Number of nodes in GraphLSTMNet input %d does not match number of graph nodes %d" %
-        #                      (len(inputs), self._nxgraph.number_of_nodes()))
-
-        # check how _linear() gets its tf variables (generation vs. reusing)
-        # and use that knowledge for U and other variables
-        # SOLVED: normal LSTM cells are created each in their own scope, and _linear gets called only once by each cell
-        # as a cell is not really an object that gets called, but a chain of ops that gets trained or evaluated
         # weights shared between cells (e.g. Ufn) and weights unique for each cell (e.g. Uf): how to handle?
         # ^this is for global Ufn local Un, which is NOT in the original paper! Paper: everything is global
         # TODO: all weights global, tf.AUTO_REUSE in cell? init all weights in net?
+        # TODO: initialize global variables here in network, hand dict of global variables to cell.
+        # cell initializes local variables
+
+        # initialize variables shared between all cells
+        with vs.variable_scope("shared_weights"):
+            for i, w in enumerate(self._shared_weights):
+                weight = vs.get_variable(
+                    name=w, shape=[num_units, num_units],
+                    dtype=inputs.dtype,
+                    initializer=self._weight_initializer)
 
         new_states = [None] * self._nxgraph.number_of_nodes()
         graph_output = [None] * self._nxgraph.number_of_nodes()
 
         # iterate over cells in graph, starting with highest confidence value
-        for node_name, node_obj in sorted(self._nxgraph.nodes(data=True), key=lambda x: x[1][_CONFIDENCE],
-                                          reverse=True):
-            # TODO variable scope to include graphLSTM name/instance-id/or similar
-            with vs.variable_scope("cell_%s" % node_name):  # TODO: variable scope here? in other places?
+        for it, (node_name, node_obj) in enumerate(sorted(self._nxgraph.nodes(data=True),
+                                                          key=lambda x: x[1][_CONFIDENCE], reverse=True)):
+            # # set scope according to if weights are being shared between all cells
+            # if self._shared_weights:
+            #     cell_scope = "global_weights"
+            # else:
+            #     cell_scope = "node_%s" % node_name
+            with vs.variable_scope("node_%s" % node_name, reuse=True if self._shared_weights and it > 0 else None):  # TODO: variable scope here? in other places?
                 # extract GraphLSTMCell object from graph node
                 cell = node_obj[_CELL]
                 # extract node index for state vector addressing
@@ -586,7 +620,7 @@ class GraphLSTMNet(RNNCell):
                 # extract input of current cell from input tuple
                 cur_inp = inputs[:, i]
                 # run current cell
-                cur_output, new_state = cell(cur_inp, cur_state, neighbour_states)
+                cur_output, new_state = cell(cur_inp, cur_state, neighbour_states, vs.get_variable_scope())
                 # store cell output and state in graph vector
                 graph_output[i] = cur_output
                 new_states[i] = new_state
