@@ -128,7 +128,7 @@ class GraphLSTMCell(RNNCell):
     def output_size(self):
         return self._num_units
 
-    def __call__(self, inputs, state, neighbour_states, net_scope, *args, **kwargs):
+    def __call__(self, inputs, state, neighbour_states, shared_weights_scope, shared_weights, *args, **kwargs):
         """Store neighbour_states as cell variable and call superclass.
 
         `__call__` is the function called by tensorflow's `dynamic_rnn`.
@@ -153,7 +153,8 @@ class GraphLSTMCell(RNNCell):
             `state_is_tuple`).
         """
         self._neighbour_states = neighbour_states
-        self._net_scope = net_scope
+        self._shared_weights_scope = shared_weights_scope
+        self._shared_weights_scope = shared_weights
         return super(GraphLSTMCell, self).__call__(inputs, state, *args, **kwargs)
 
     def call(self, inputs, state):
@@ -413,7 +414,7 @@ class GraphLSTMNet(RNNCell):
                     node_attr_lookuperr = "_CONFIDENCE"
                 if node_attr_lookuperr is not None:
                     raise KeyError("Node '%s' has no attribute %s" % (node_name, node_attr_lookuperr))
-                if not ignore_cell_type:  # todo: verify same output size for all cells
+                if not ignore_cell_type:  # todo: verify same output size for all cells?
                     if not isinstance(nxgraph.nodes[node_name][_CELL], GraphLSTMCell):
                         raise TypeError("Cell of node '%s' is not a GraphLSTMCell. "
                                         "If this is expected, consider running is_valid_nxgraph with "
@@ -471,8 +472,7 @@ class GraphLSTMNet(RNNCell):
                              % (len(output.shape), output.shape))
         return array_ops.transpose(output, perm)
 
-    def __init__(self, nxgraph, num_units=None, state_is_tuple=True, shared_weights=ALL_GLOBAL,
-                 weight_initializer=None, bias_initializer=None, name=None):
+    def __init__(self, nxgraph, num_units=None, state_is_tuple=True, shared_weights=ALL_GLOBAL, name=None):
         """Create a Graph LSTM Network composed of a graph of GraphLSTMCells.
 
         Args:
@@ -510,8 +510,6 @@ class GraphLSTMNet(RNNCell):
         self._nxgraph = nxgraph
         self._state_is_tuple = state_is_tuple
         self._shared_weights = shared_weights
-        self._weight_initializer = weight_initializer
-        self._bias_initializer = bias_initializer
         if not state_is_tuple:
             if any(nest.is_sequence(self._cell(n).state_size) for n in self._nxgraph):
                 raise ValueError("Some cells return tuples of states, but the flag "
@@ -564,13 +562,8 @@ class GraphLSTMNet(RNNCell):
         # TODO: initialize global variables here in network, hand dict of global variables to cell.
         # cell initializes local variables
 
-        # initialize variables shared between all cells
-        with vs.variable_scope("shared_weights"):
-            for i, w in enumerate(self._shared_weights):
-                weight = vs.get_variable(
-                    name=w, shape=[num_units, num_units],
-                    dtype=inputs.dtype,
-                    initializer=self._weight_initializer)
+        # initialize scope for weights shared between all cells
+        shared_weights_scope = vs.variable_scope("shared_weights")
 
         new_states = [None] * self._nxgraph.number_of_nodes()
         graph_output = [None] * self._nxgraph.number_of_nodes()
@@ -583,7 +576,11 @@ class GraphLSTMNet(RNNCell):
             #     cell_scope = "global_weights"
             # else:
             #     cell_scope = "node_%s" % node_name
-            with vs.variable_scope("node_%s" % node_name, reuse=True if self._shared_weights and it > 0 else None):  # TODO: variable scope here? in other places?
+
+            # initialize scope for weights shared between all cells
+            shared_weights_scope = vs.variable_scope("shared_weights", reuse=True if it > 0 else None)
+
+            with vs.variable_scope("node_%s" % node_name):  # TODO: variable scope here? in other places?
                 # extract GraphLSTMCell object from graph node
                 cell = node_obj[_CELL]
                 # extract node index for state vector addressing
@@ -620,7 +617,8 @@ class GraphLSTMNet(RNNCell):
                 # extract input of current cell from input tuple
                 cur_inp = inputs[:, i]
                 # run current cell
-                cur_output, new_state = cell(cur_inp, cur_state, neighbour_states, vs.get_variable_scope())
+                cur_output, new_state = cell(cur_inp, cur_state, neighbour_states,
+                                             shared_weights_scope, self._shared_weights)
                 # store cell output and state in graph vector
                 graph_output[i] = cur_output
                 new_states[i] = new_state
@@ -698,6 +696,7 @@ def _graphlstm_linear(weight_names, args,
                     dtype=dtype,
                     initializer=weight_initializer)
             summands.append(math_ops.matmul(x, weight))
+            print(x.get_shape()[1].value, output_size)
         res = math_ops.add_n(summands)
         if bias:
             reuse = True if reuse_weights is not None and weight_names[-1] in reuse_weights else None

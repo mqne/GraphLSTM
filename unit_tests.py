@@ -34,7 +34,7 @@ class DummyFixedCell(orig_rci.RNNCell):
     def output_size(self):
         return None
 
-    def call(self, inputs, state, neighbour_states, cell_scope):
+    def call(self, inputs, state, neighbour_states, shared_weights_scope, shared_weights):
         return self._returnValue
 
 
@@ -56,7 +56,7 @@ class DummyFixedTfCell(orig_rci.RNNCell):
         return self._num_units
 
     # get neighbour_states from net without embedding it in the state itself
-    def __call__(self, inputs, state, neighbour_states, cell_scope, *args, **kwargs):
+    def __call__(self, inputs, state, neighbour_states, shared_weights_scope, shared_weights, *args, **kwargs):
         self._neighbour_states = neighbour_states
         return super(DummyFixedTfCell, self).__call__(inputs, state, *args, **kwargs)
 
@@ -81,7 +81,7 @@ class DummyReturnCell(orig_rci.RNNCell):
     def output_size(self):
         return None
 
-    def call(self, inputs, state, neighbour_states, cell_scope):
+    def call(self, inputs, state, neighbour_states, shared_weights_scope, shared_weights):
         return (inputs, state, neighbour_states), (neighbour_states, state, inputs)
 
 
@@ -105,7 +105,7 @@ class DummyReturnTfCell(orig_rci.RNNCell):
         return self._num_units
 
     # get neighbour_states from net without embedding them in the state itself
-    def __call__(self, inputs, state, neighbour_states, cell_scope, *args, **kwargs):
+    def __call__(self, inputs, state, neighbour_states, shared_weights_scope, shared_weights, *args, **kwargs):
         self._neighbour_states = neighbour_states
         return super(DummyReturnTfCell, self).__call__(inputs, state, *args, **kwargs)
 
@@ -162,7 +162,7 @@ class DummyNeighbourHelperNet(orig_rci.RNNCell):
         return self._cell.zero_state(batch_size, dtype)
 
     def call(self, inputs, state):
-        return self._cell(inputs, state, self._neighbour_states, tf.get_variable_scope())
+        return self._cell(inputs, state, self._neighbour_states, tf.get_variable_scope(), glstm.ALL_GLOBAL)
 
 
 # for overriding _graphlstm_linear in graph_lstm.py, returns vector of 'value' of expected output size
