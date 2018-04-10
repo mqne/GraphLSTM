@@ -131,7 +131,6 @@ class DummyReturnTfGLSTMCell(glstm.GraphLSTMCell):
     # testing state_size, output_size and __call__ by not overriding them
 
     def call(self, inputs, state):
-        print("Scope in DummyReturnTfGLSTMCell.call: " + tf.get_variable_scope().name)  # todo remove
         # same as DummyReturnTfCell.call(self, inputs, state) with addition of own state each timestep
         if self._return_sum_of_neighbour_states:
             state = glstm.LSTMStateTuple(tf.add_n([m for m, h in self._neighbour_states]) + state[0],
@@ -1025,7 +1024,6 @@ class TestGraphLSTMLinear(tf.test.TestCase):
         self.x = tf.constant([[1., 2.], [3., 4.]])
         self.y = tf.constant([[5., 6.], [7., 8.]])
         self.z = tf.constant([[0., 1.], [2., 3.], [4., 5.]])
-        self.custom_initializer_1 = tf.constant_initializer([[0, -1], [2, 1]])
 
     def test_errors(self):
         self.assertRaisesRegex(ValueError, "args", self.func, ['_'], [])
@@ -1041,37 +1039,29 @@ class TestGraphLSTMLinear(tf.test.TestCase):
                                self.func, [x1, b1], [x1])
 
     def test_calc(self):
-        w1 = "weight_name_1"
-        w2 = "weight_name_2"
-        w3 = "weight_name_3"
-        w4 = "weight_name_4"
-        b1 = "bias_name_1"
-        b2 = "bias_name_2"
-        b3 = "bias_name_3"
-        n = "non_existing_name"
+        w1 = tf.ones([2, 2])
+        w2 = tf.constant([[0, -1], [2, 1]], dtype=tf.float32)
+        w3 = tf.ones([2, 1])
+        w4 = tf.ones([2, 4])
+        b1 = tf.zeros([2])
+        b2 = tf.ones([2])
+        b3 = tf.ones([4])
 
         # x * w1 (1 1,1 1)
-        glxw1 = self.func([w1], self.x, 2, False, weight_initializer=tf.ones_initializer)
+        glxw1 = self.func(w1, self.x)
         glxw1_expected_result = [[3, 3], [7, 7]]
-        # existing variable should throw error when fetched without reuse
-        self.assertRaisesRegex(ValueError, "already exists", self.func, w1, self.x, 2, False)
-        # new variable should throw error when fetched with reuse
-        self.assertRaisesRegex(ValueError, "does not exist", self.func, n, self.x, 2, False, reuse_weights=n)
         # x * w1 + y * w2 (0 -1,2 1) + b1 (0 0)
-        glxw1yw2b1 = self.func([w1, w2, b1], [self.x, self.y], 2, True, weight_initializer=self.custom_initializer_1,
-                               reuse_weights=[w1])
+        glxw1yw2b1 = self.func([w1, w2, b1], [self.x, self.y])
         glxw1yw2b1_expected_result = [[15, 4], [23, 8]]
         # y * w1 + x * w2 + b2 (1 1)
-        glyw1xw2b2 = self.func([w1, w2, b2], [self.y, self.x], 2, True, bias_initializer=tf.ones_initializer,
-                               reuse_weights=[w1, w2])
+        glyw1xw2b2 = self.func([w1, w2, b2], [self.y, self.x])
         glyw1xw2b2_expected_result = [[16, 13], [24, 17]]
         # non-square matrices
         # x * w3 (1 1)
-        glxw3 = self.func(w3, self.x, 1, False, weight_initializer=tf.ones_initializer)
+        glxw3 = self.func(w3, self.x)
         glxw3_expected_result = [[3], [7]]
-        # z * w4 (1 1 1 1,1 1 1 1,1 1 1 1) + b3 (1 1 1 1)
-        glzw4b3 = self.func([w4, b3], self.z, 4, True, weight_initializer=tf.ones_initializer,
-                            bias_initializer=tf.ones_initializer)
+        # z * w4 (1 1 1 1,1 1 1 1) + b3 (1 1 1 1)
+        glzw4b3 = self.func([w4, b3], self.z)
         glzw4b3_expected_result = [[2, 2, 2, 2], [6, 6, 6, 6], [10, 10, 10, 10]]
 
         with self.test_session():
