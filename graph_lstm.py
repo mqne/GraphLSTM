@@ -176,9 +176,9 @@ class GraphLSTMCell(RNNCell):
         if weight in _WEIGHTS:
             return tuple([inputs.get_shape()[1], self.output_size])
         if weight in _UEIGHTS | _NEIGHBOUR_UEIGHTS:
-            return tuple([self.state_size[1][1] if self._state_is_tuple else self.state_size/2, self.output_size])
+            return tuple([self.state_size[1] if self._state_is_tuple else self.state_size//2, self.output_size])
         if weight in _BIASES:
-            return tuple(self.output_size)
+            return tuple([self.output_size])
         raise NotImplementedError("Inferring shape for non-standard Graph LSTM cell weights is not supported")
 
     def _init_weights(self, inputs):
@@ -737,12 +737,94 @@ class GraphLSTMNet(RNNCell):
 
 
 # TODO: rewrite _graphlstm_linear without initializations
+
 # calculates terms like W * f + U * h + b
-def _graphlstm_linear(weight_names, args,
+def _graphlstm_linear(weights, args,
                       output_size,
                       bias,
                       bias_initializer=None,
                       weight_initializer=None, reuse_weights=None):
+    """Linear map: sum_i(args[i] * weights[i]), where weights[i] can be multiple variables.
+
+    Args:
+      weights: a string or list of strings
+      args: a 2D Tensor or a list of 2D, batch x n, Tensors.
+      output_size: int, second dimension of W[i].
+      bias: boolean, whether to add a bias term or not.
+      bias_initializer: starting value to initialize the bias
+        (default is all zeros).
+      weight_initializer: starting value to initialize the weight.
+      reuse_weights: a string or list of strings defining which weights should be reused.
+
+    Returns:
+      A 2D Tensor with shape [batch x output_size] equal to
+      sum_i(args[i] * W[i]), where W[i]s are newly created matrices for each W[i] not to be reused.
+
+    Raises:
+      ValueError: if some of the arguments has unspecified or wrong shape.
+      LookupError: if a weight name specified to be reused does not appear in the list of weights.
+    """
+    if args is None or (nest.is_sequence(args) and not args):
+        raise ValueError("`args` must be specified")
+    if weights is None or (nest.is_sequence(weights) and not weights):
+        raise ValueError("`weights` must be specified")
+    if not nest.is_sequence(args):
+        args = [args]
+    if not nest.is_sequence(weights):
+        weights = [weights]
+    if reuse_weights is not None:
+        if not nest.is_sequence(reuse_weights):
+            reuse_weights = [reuse_weights]
+        for w in reuse_weights:
+            if w not in weights:
+                raise LookupError("'%s' in `reuse_weights` not found in `weights`" % str(w))
+
+    # for each variable in 'args' there needs to be exactly one in "weights", plus bias
+    if bias:
+        if len(weights) != len(args) + 1:
+            raise ValueError("If `bias` is True, `weights` needs to be one element longer than `args`,"
+                             " but found: %d and %d, respectively" % (len(weights), len(args)))
+    else:
+        if len(weights) != len(args):
+            raise ValueError("If `bias` is False, `weights` and `args` need to be of the same length,"
+                             " but found: %d and %d, respectively" % (len(weights), len(args)))
+
+    dtype = [a.dtype for a in args][0]
+
+    # Now the computation.
+    scope = vs.get_variable_scope()
+    with vs.variable_scope(scope) as outer_scope:
+        summands = []
+        for i, x in enumerate(args):
+            reuse = True if reuse_weights is not None and weights[i] in reuse_weights else None
+            with vs.variable_scope(outer_scope, reuse=reuse):
+                weight = vs.get_variable(
+                    name=weights[i], shape=[x.get_shape()[1].value, output_size],
+                    dtype=dtype,
+                    initializer=weight_initializer)
+            summands.append(math_ops.matmul(x, weight))
+            print(x.get_shape()[1].value, output_size)
+        res = math_ops.add_n(summands)
+        if bias:
+            reuse = True if reuse_weights is not None and weights[-1] in reuse_weights else None
+            with vs.variable_scope(outer_scope, reuse=reuse) as inner_scope:
+                inner_scope.set_partitioner(None)
+                if bias_initializer is None:
+                    bias_initializer = init_ops.constant_initializer(0.0, dtype=dtype)
+                b = vs.get_variable(
+                    name=weights[-1], shape=[output_size],
+                    dtype=dtype,
+                    initializer=bias_initializer)
+                res = nn_ops.bias_add(res, b)
+        return res
+
+
+# calculates terms like W * f + U * h + b
+def _deprecated_graphlstm_linear(weight_names, args,
+                                 output_size,
+                                 bias,
+                                 bias_initializer=None,
+                                 weight_initializer=None, reuse_weights=None):
     """Linear map: sum_i(args[i] * weights[i]), where weights[i] can be multiple variables.
 
     Args:

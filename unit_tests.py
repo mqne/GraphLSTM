@@ -291,10 +291,10 @@ class TestGraphLSTMNet(tf.test.TestCase):
         # invalid keyword
         self.assertRaises(TypeError, cg, v_template, 6, invalid_keyword=99)
         # valid keywords
-        v_graph = cg(v_template, 6, forget_bias=99, activation="xyz")
+        v_graph = cg(v_template, 6, bias_initializer=99, weight_initializer="xyz")
         for n in ['a', 'b', 'c']:
-            self.assertEqual(v_graph.node[n][_CELL]._forget_bias, 99)
-            self.assertEqual(v_graph.node[n][_CELL]._activation, "xyz")
+            self.assertEqual(v_graph.node[n][_CELL]._bias_initializer, 99)
+            self.assertEqual(v_graph.node[n][_CELL]._weight_initializer, "xyz")
 
     def test_init(self):
         # GraphLSTMNet should complain when initiated with something else than a nx.Graph
