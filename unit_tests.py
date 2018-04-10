@@ -172,17 +172,18 @@ class DummyNeighbourHelperNet(orig_rci.RNNCell):
 
 # for overriding _graphlstm_linear in graph_lstm.py, returns vector of 'value' of expected output size
 class DummyGraphlstmLinear:
-    def __init__(self, value):
+    def __init__(self, value, output_size):
         self._value = value
+        self._output_size = output_size
 
-    def __call__(self, weight_names, args, output_size, bias, **kwargs):
+    def __call__(self, weights, args, **kwargs):
         from tensorflow.python.util import nest
         if args is None or (nest.is_sequence(args) and not args):
             raise ValueError("`args` must be specified")
         if not nest.is_sequence(args):
             args = [args]
         dtype = [a.dtype for a in args][0]
-        shape = [args[0].get_shape()[0].value, output_size]
+        shape = [args[0].get_shape()[0].value, self._output_size]
 
         return tf.zeros(shape=shape, dtype=dtype) + self._value
 
@@ -736,14 +737,14 @@ class TestGraphLSTMCell(tf.test.TestCase):
             np.testing.assert_allclose(actual_result[1], expected_final_state)
 
     def test_call_without__graphlstm_linear(self):
-        # patch _graphlstm_linear method to stub for this test
-        glstm._graphlstm_linear = DummyGraphlstmLinear((np.random.randn() - .5) * 20)
-
         num_units = 3
         batch_size = 2
         time_steps = 4
 
         glstm_cell = glstm.GraphLSTMCell(num_units)
+
+        # patch _graphlstm_linear method to stub for this test
+        glstm._graphlstm_linear = DummyGraphlstmLinear((np.random.randn() - .5) * 20, glstm_cell.output_size)
 
         self.assertEqual(glstm_cell.output_size, num_units)
         self.assertIsInstance(glstm_cell.state_size, glstm.LSTMStateTuple)
