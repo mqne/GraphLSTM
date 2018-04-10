@@ -191,11 +191,11 @@ class GraphLSTMCell(RNNCell):
         Returns:
           A dict of weight name:tensorflow-weight pairs.
         """
-        weight_dict = {}
         dtype = inputs.dtype
-
         bias_initializer = init_ops.constant_initializer(0.0, dtype=dtype) if self._bias_initializer is None \
             else self._bias_initializer
+
+        weight_dict = {}
 
         # initialize shared weights
         with vs.variable_scope(self._shared_weights_scope) as scope:
@@ -316,43 +316,40 @@ class GraphLSTMCell(RNNCell):
         # Eq. 1: averaged hidden states for neighbouring nodes h^-_{i,t}
         h_j_avg = math_ops.reduce_mean(h_j_all, axis=0)
 
-        # define weight and bias names
-        w_u = "W_u"
-        w_f = "W_f"
-        w_c = "W_c"
-        w_o = "W_o"
-        u_u = "U_u"
-        u_f = "U_f"
-        u_c = "U_c"
-        u_o = "U_o"
-        u_un = "U_un"
-        u_fn = "U_fn"
-        u_cn = "U_cn"
-        u_on = "U_on"
-        b_u = "b_u"
-        b_f = "b_f"
-        b_c = "b_c"
-        b_o = "b_o"
+        # fetch weights and biases
+        w_u = weight_dict[self._w_u]
+        w_f = weight_dict[self._w_f]
+        w_c = weight_dict[self._w_c]
+        w_o = weight_dict[self._w_o]
+        u_u = weight_dict[self._u_u]
+        u_f = weight_dict[self._u_f]
+        u_c = weight_dict[self._u_c]
+        u_o = weight_dict[self._u_o]
+        u_un = weight_dict[self._u_un]
+        u_fn = weight_dict[self._u_fn]
+        u_cn = weight_dict[self._u_cn]
+        u_on = weight_dict[self._u_on]
+        b_u = weight_dict[self._b_u]
+        b_f = weight_dict[self._b_f]
+        b_c = weight_dict[self._b_c]
+        b_o = weight_dict[self._b_o]
 
         # Eq. 2
         # input gate
         # g_u = sigmoid ( f_{i,t+1} * W_u + h_{i,t} * U_u + h^-_{i,t} * U_{un} + b_u )
-        g_u = sigmoid(_graphlstm_linear([w_u, u_u, u_un, b_u], [inputs, h_i, h_j_avg], self.output_size, True))
+        g_u = sigmoid(_graphlstm_linear([w_u, u_u, u_un, b_u], [inputs, h_i, h_j_avg]))
         # adaptive forget gate
         # g_fij = sigmoid ( f_{i,t+1} * W_f + h_{j,t} * U_fn + b_f ) for every neighbour j
-        g_fij = [sigmoid(_graphlstm_linear([w_f, u_fn, b_f], [inputs, h_j], self.output_size, True,
-                                           reuse_weights=None if j == 0 else [w_f, u_fn, b_f]))
-                 for j, h_j in enumerate(h_j_all)]
+        g_fij = [sigmoid(_graphlstm_linear([w_f, u_fn, b_f], [inputs, h_j])) for h_j in h_j_all]
         # forget gate
         # g_fi = sigmoid ( f_{i,t+1} * W_f + h_{i,t} * U_f + b_f )
-        g_fi = sigmoid(_graphlstm_linear([w_f, u_f, b_f], [inputs, h_i], self.output_size, True,
-                                         reuse_weights=[w_f, b_f]))
+        g_fi = sigmoid(_graphlstm_linear([w_f, u_f, b_f], [inputs, h_i]))
         # output gate
         # g_o = sigmoid ( f_{i,t+1} * W_o + h_{i,t} * U_o + h^-_{i,t} * U_{on} + b_o )
-        g_o = sigmoid(_graphlstm_linear([w_o, u_o, u_on, b_o], [inputs, h_i, h_j_avg], self.output_size, True))
+        g_o = sigmoid(_graphlstm_linear([w_o, u_o, u_on, b_o], [inputs, h_i, h_j_avg]))
         # memory gate
         # g_c = tanh ( f_{i,t+1} * W_c + h_{i,t} * U_c + h^-_{i,t} * U_{cn} + b_c )
-        g_c = tanh(_graphlstm_linear([w_c, u_c, u_cn, b_c], [inputs, h_i, h_j_avg], self.output_size, True))
+        g_c = tanh(_graphlstm_linear([w_c, u_c, u_cn, b_c], [inputs, h_i, h_j_avg]))
 
         # new memory states
         # m_i_new = sum ( g_fij .* most recent state of each neighbouring node ) / number of neighbouring nodes ...
@@ -739,30 +736,24 @@ class GraphLSTMNet(RNNCell):
 # TODO: rewrite _graphlstm_linear without initializations
 
 # calculates terms like W * f + U * h + b
-def _graphlstm_linear(weights, args,
-                      output_size,
-                      bias,
-                      bias_initializer=None,
-                      weight_initializer=None, reuse_weights=None):
-    """Linear map: sum_i(args[i] * weights[i]), where weights[i] can be multiple variables.
+def _graphlstm_linear(weights, args):
+    """Linear map: sum_i(args[i] * weights[i]) + bias, where weights[i] and bias can be multiple variables.
+
+    Weights are multiplied with args according to the ordering inside the lists.
+      The weights parameter must be ordered such that the first part (i.e. the first len(args) elements)
+      constitutes only weights, and the second part (after len(args)) only biases.
 
     Args:
-      weights: a string or list of strings
+      weights: a Tensor or a list of weight and bias Tensors.
       args: a 2D Tensor or a list of 2D, batch x n, Tensors.
-      output_size: int, second dimension of W[i].
-      bias: boolean, whether to add a bias term or not.
-      bias_initializer: starting value to initialize the bias
-        (default is all zeros).
-      weight_initializer: starting value to initialize the weight.
-      reuse_weights: a string or list of strings defining which weights should be reused.
 
     Returns:
       A 2D Tensor with shape [batch x output_size] equal to
-      sum_i(args[i] * W[i]), where W[i]s are newly created matrices for each W[i] not to be reused.
+      sum_i(args[i] * W[i]) + b ( + ... + b_n) .
 
     Raises:
-      ValueError: if some of the arguments has unspecified or wrong shape.
-      LookupError: if a weight name specified to be reused does not appear in the list of weights.
+      ValueError: if an argument has unspecified or wrong shape or if trying to multiply
+        a bias or adding a weight.
     """
     if args is None or (nest.is_sequence(args) and not args):
         raise ValueError("`args` must be specified")
@@ -772,51 +763,26 @@ def _graphlstm_linear(weights, args,
         args = [args]
     if not nest.is_sequence(weights):
         weights = [weights]
-    if reuse_weights is not None:
-        if not nest.is_sequence(reuse_weights):
-            reuse_weights = [reuse_weights]
-        for w in reuse_weights:
-            if w not in weights:
-                raise LookupError("'%s' in `reuse_weights` not found in `weights`" % str(w))
 
-    # for each variable in 'args' there needs to be exactly one in "weights", plus bias
-    if bias:
-        if len(weights) != len(args) + 1:
-            raise ValueError("If `bias` is True, `weights` needs to be one element longer than `args`,"
-                             " but found: %d and %d, respectively" % (len(weights), len(args)))
-    else:
-        if len(weights) != len(args):
-            raise ValueError("If `bias` is False, `weights` and `args` need to be of the same length,"
-                             " but found: %d and %d, respectively" % (len(weights), len(args)))
-
-    dtype = [a.dtype for a in args][0]
+    if len(args) > len(weights):
+        raise ValueError("Number of args (%i) exceeds number of weights (%i)" % (len(args), len(weights)))
 
     # Now the computation.
-    scope = vs.get_variable_scope()
-    with vs.variable_scope(scope) as outer_scope:
-        summands = []
-        for i, x in enumerate(args):
-            reuse = True if reuse_weights is not None and weights[i] in reuse_weights else None
-            with vs.variable_scope(outer_scope, reuse=reuse):
-                weight = vs.get_variable(
-                    name=weights[i], shape=[x.get_shape()[1].value, output_size],
-                    dtype=dtype,
-                    initializer=weight_initializer)
-            summands.append(math_ops.matmul(x, weight))
-            print(x.get_shape()[1].value, output_size)
-        res = math_ops.add_n(summands)
-        if bias:
-            reuse = True if reuse_weights is not None and weights[-1] in reuse_weights else None
-            with vs.variable_scope(outer_scope, reuse=reuse) as inner_scope:
-                inner_scope.set_partitioner(None)
-                if bias_initializer is None:
-                    bias_initializer = init_ops.constant_initializer(0.0, dtype=dtype)
-                b = vs.get_variable(
-                    name=weights[-1], shape=[output_size],
-                    dtype=dtype,
-                    initializer=bias_initializer)
-                res = nn_ops.bias_add(res, b)
-        return res
+    summands = []
+    for x, w in zip(args, weights[:len(args)]):
+        if w in _BIASES:
+            raise ValueError("Weight scheduled for multiplication with arg found in _BIASES: %s" % w.name)
+        summands.append(math_ops.matmul(x, w))
+    res = math_ops.add_n(summands)
+
+    for b in weights[len(args):]:
+        if b in _WEIGHTS | _UEIGHTS | _NEIGHBOUR_UEIGHTS:
+            raise ValueError("Weight scheduled for bias addition found in %s: %s" %
+                             ("_WEIGHTS" if b in _WEIGHTS else "_UEIGHTS" if b in _UEIGHTS else "_NEIGHBOUR_WEIGHTS",
+                              b.name))
+        res = nn_ops.bias_add(res, b)
+
+    return res
 
 
 # calculates terms like W * f + U * h + b

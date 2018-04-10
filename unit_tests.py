@@ -143,12 +143,13 @@ class DummyReturnTfGLSTMCell(glstm.GraphLSTMCell):
 
 # feeds its GraphLSTMCell the same neighbour_states vector each timestep
 class DummyNeighbourHelperNet(orig_rci.RNNCell):
-    def __init__(self, cell, neighbour_states):
-        super(DummyNeighbourHelperNet, self).__init__()
+    def __init__(self, cell, neighbour_states, name=None, shared_weights_scope=None):
+        super(DummyNeighbourHelperNet, self).__init__(name=name)
         assert isinstance(cell, glstm.GraphLSTMCell)
         self._cell = cell
         # neighbour_states dimensions: num_neighbours, batch_size, num_units
         self._neighbour_states = neighbour_states
+        self._shared_weights_scope = shared_weights_scope
 
     @property
     def state_size(self):
@@ -162,7 +163,11 @@ class DummyNeighbourHelperNet(orig_rci.RNNCell):
         return self._cell.zero_state(batch_size, dtype)
 
     def call(self, inputs, state):
-        return self._cell(inputs, state, self._neighbour_states, tf.get_variable_scope(), glstm.ALL_GLOBAL)
+        if self._shared_weights_scope is not None:
+            sws = self._shared_weights_scope
+        else:
+            sws = tf.get_variable_scope()
+        return self._cell(inputs, state, self._neighbour_states, sws, glstm.ALL_GLOBAL)
 
 
 # for overriding _graphlstm_linear in graph_lstm.py, returns vector of 'value' of expected output size
@@ -844,12 +849,15 @@ class TestGraphLSTMCell(tf.test.TestCase):
                                                                )[1]
                                        for t in range(1, time_steps + 1)], 0, 1)
 
-        helper_net = DummyNeighbourHelperNet(glstm_cell, cell_neighbour_states_t4)
+        scope = tf.get_variable_scope()
+        with tf.variable_scope("rnn/dhnet", reuse=True) as init_scope:
+            pass
+        helper_net = DummyNeighbourHelperNet(glstm_cell, cell_neighbour_states_t4, name="dhnet",
+                                             shared_weights_scope=init_scope)
 
         # initialize weights to specific values
-        scope = tf.get_variable_scope()
         # note: the scope name is sensitive to changes in the architecture of the test
-        with tf.variable_scope("rnn/dummy_neighbour_helper_net/graph_lstm_cell") as init_scope:
+        with tf.variable_scope("rnn/dhnet"):
 
             # weight and bias names (copied from GraphLSTMCell.call) # and values
             weights = [
