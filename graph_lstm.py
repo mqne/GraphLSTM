@@ -770,16 +770,21 @@ def _graphlstm_linear(weights, args):
     # Now the computation.
     summands = []
     for x, w in zip(args, weights[:len(args)]):
-        if w in _BIASES:
-            raise ValueError("Weight scheduled for multiplication with arg found in _BIASES: %s" % w.name)
+        # extract weight name from full tensorflow weight name
+        name = w.name.split("/")[-1].split(":")[0]
+        if name in _BIASES:
+            raise ValueError("Weight scheduled for multiplication with arg found in _BIASES: %s" % name)
         summands.append(math_ops.matmul(x, w))
     res = math_ops.add_n(summands)
 
     for b in weights[len(args):]:
-        if b in _WEIGHTS | _UEIGHTS | _NEIGHBOUR_UEIGHTS:
+        name = b.name.split("/")[-1].split(":")[0]
+        if name in _WEIGHTS | _UEIGHTS | _NEIGHBOUR_UEIGHTS:
             raise ValueError("Weight scheduled for bias addition found in %s: %s" %
-                             ("_WEIGHTS" if b in _WEIGHTS else "_UEIGHTS" if b in _UEIGHTS else "_NEIGHBOUR_WEIGHTS",
-                              b.name))
+                             ("_WEIGHTS" if name in _WEIGHTS else
+                              "_UEIGHTS" if name in _UEIGHTS else
+                              "_NEIGHBOUR_WEIGHTS",
+                              name))
         res = nn_ops.bias_add(res, b)
 
     return res

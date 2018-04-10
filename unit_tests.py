@@ -1028,12 +1028,17 @@ class TestGraphLSTMLinear(tf.test.TestCase):
         self.custom_initializer_1 = tf.constant_initializer([[0, -1], [2, 1]])
 
     def test_errors(self):
-        self.assertRaisesRegex(ValueError, "args", self.func, ['_'], [], 1, True)
-        self.assertRaisesRegex(ValueError, "weight_names", self.func, [], ['_'], 1, True)
-        self.assertRaisesRegex(ValueError, "True.*one element longer", self.func, ['1', '2'], ['1', '2'], 1, True)
-        self.assertRaisesRegex(ValueError, "False.*same length", self.func, ['1', '2'], ['1'], 1, False)
-        self.assertRaisesRegex(LookupError, "`reuse_weights`", self.func, ['1', '2'], ['3', '4'], 1, False,
-                               reuse_weights=['3'])
+        self.assertRaisesRegex(ValueError, "args", self.func, ['_'], [])
+        self.assertRaisesRegex(ValueError, "weights", self.func, [], ['_'])
+        self.assertRaisesRegex(ValueError, "exceeds number of weights", self.func, ['1', '2'], ['1', '2', '3'])
+        x1 = tf.constant([[1]], name="U_u")
+        b1 = tf.constant([1], name="W_u")
+        self.assertRaisesRegex(ValueError, "Weight scheduled for bias addition found in _WEIGHTS: W_u",
+                               self.func, [x1, b1], [x1])
+        x1 = tf.constant([[1]], name="b_u")
+        b1 = tf.constant([1], name="b_f")
+        self.assertRaisesRegex(ValueError, "Weight scheduled for multiplication with arg found in _BIASES: b_u",
+                               self.func, [x1, b1], [x1])
 
     def test_calc(self):
         w1 = "weight_name_1"
