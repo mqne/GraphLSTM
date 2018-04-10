@@ -63,9 +63,9 @@ _BIASES = {
     "b_o"}
 
 # templates for which weights should be shared between cells
-ALL_LOCAL = set()
-ALL_GLOBAL = {*_WEIGHTS, *_UEIGHTS, *_NEIGHBOUR_UEIGHTS, *_BIASES}
-NEIGHBOUR_CONNECTIONS_GLOBAL = {*_NEIGHBOUR_UEIGHTS}
+NONE_SHARED = set()
+ALL_SHARED = {*_WEIGHTS, *_UEIGHTS, *_NEIGHBOUR_UEIGHTS, *_BIASES}
+NEIGHBOUR_CONNECTIONS_SHARED = {*_NEIGHBOUR_UEIGHTS}
 
 
 class GraphLSTMCell(RNNCell):
@@ -125,12 +125,12 @@ class GraphLSTMCell(RNNCell):
           bias_initializer: The initializer that should be used for initializing
             biases. If None, _init_weights uses a constant initializer of 0.
           weight_initializer: The initializer that should be used for initializing
-            weights. If None, the Tensorflow standard initializer is used.
+            weights. If None, the tensorflow standard initializer is used.
           reuse: (optional) Python boolean describing whether to reuse variables
             in an existing scope.  If not `True`, and the existing scope already has
-            the given variables, an error is raised.
+            the given variables, an error is raised. todo: obsolete?
           name: (optional) The name that will be used for this cell in the
-            Tensorflow namespace.
+            tensorflow namespace.
 
           When restoring from CudnnLSTM-trained checkpoints, must use
           CudnnCompatibleLSTMCell instead.
@@ -198,7 +198,7 @@ class GraphLSTMCell(RNNCell):
         weight_dict = {}
 
         # initialize shared weights
-        with vs.variable_scope(self._shared_weights_scope) as scope:
+        with vs.variable_scope(self._shared_scope) as scope:
             for weight_name in self._shared_weights:
                 if weight_name not in _BIASES:
                     weight = vs.get_variable(
@@ -233,13 +233,14 @@ class GraphLSTMCell(RNNCell):
 
         return weight_dict
 
-    def __call__(self, inputs, state, neighbour_states, shared_weights_scope, shared_weights, *args, **kwargs):
-        """Store neighbour_states as cell variable and call superclass.
+    def __call__(self, inputs, state, neighbour_states, shared_scope, shared_weights, *args, **kwargs):
+        """Store neighbour_states and shared properties as cell variable and call superclass.
 
         `__call__` is the function called by tensorflow's `dynamic_rnn`.
-        It stores `neighbour_states` in a cell variable and relays the rest
-        to the `__call__` method of the superclass, which in the end will call
-        GraphLSTMNet's `call` method.
+        It stores `neighbour_states`, `shared_scope` and `shared_weights`
+        in cell variables and relays the rest to the `__call__` method
+        of the superclass, which in the end will call GraphLSTMNet's
+        `call` method.
 
         Args:
           inputs: `2-D` tensor with shape `[batch_size x input_size]`.
@@ -248,6 +249,8 @@ class GraphLSTMCell(RNNCell):
             `True`.  Otherwise, a `Tensor` shaped
             `[batch_size x 2 * self.state_size]`.
           neighbour_states: a list of n `LSTMStateTuples` of state tensors (m_j, h_j)
+          shared_scope: The tensorflow scope in which the shared variables reside.
+          shared_weights: The list of names of shared variables.
           *args: additional positional arguments to be passed to `self.call`.
           **kwargs: additional keyword arguments to be passed to `self.call`.
             **Note**: kwarg `scope` is reserved for use by the layer.
@@ -258,7 +261,7 @@ class GraphLSTMCell(RNNCell):
             `state_is_tuple`).
         """
         self._neighbour_states = neighbour_states
-        self._shared_weights_scope = shared_weights_scope
+        self._shared_scope = shared_scope
         self._shared_weights = shared_weights
         return super(GraphLSTMCell, self).__call__(inputs, state, *args, **kwargs)
 
@@ -577,7 +580,7 @@ class GraphLSTMNet(RNNCell):
                              % (len(output.shape), output.shape))
         return array_ops.transpose(output, perm)
 
-    def __init__(self, nxgraph, num_units=None, state_is_tuple=True, shared_weights=ALL_GLOBAL, name=None):
+    def __init__(self, nxgraph, num_units=None, state_is_tuple=True, shared_weights=ALL_SHARED, name=None):
         """Create a Graph LSTM Network composed of a graph of GraphLSTMCells.
 
         Args:
@@ -588,7 +591,7 @@ class GraphLSTMNet(RNNCell):
             concatenated along the column axis.  This latter behavior will soon be
             deprecated.
           shared_weights: A list of the weights that will be shared between all cells.
-            Default: ALL_GLOBAL.
+            Default: ALL_SHARED.
 
         Raises:
           ValueError: If nxgraph is not valid, or at least one of the cells
@@ -733,8 +736,6 @@ class GraphLSTMNet(RNNCell):
         return graph_output, new_states
 
 
-# TODO: rewrite _graphlstm_linear without initializations
-
 # calculates terms like W * f + U * h + b
 def _graphlstm_linear(weights, args):
     """Linear map: sum_i(args[i] * weights[i]) + bias, where weights[i] and bias can be multiple variables.
@@ -788,84 +789,3 @@ def _graphlstm_linear(weights, args):
         res = nn_ops.bias_add(res, b)
 
     return res
-
-
-# calculates terms like W * f + U * h + b
-def _deprecated_graphlstm_linear(weight_names, args,
-                                 output_size,
-                                 bias,
-                                 bias_initializer=None,
-                                 weight_initializer=None, reuse_weights=None):
-    """Linear map: sum_i(args[i] * weights[i]), where weights[i] can be multiple variables.
-
-    Args:
-      weight_names: a string or list of strings
-      args: a 2D Tensor or a list of 2D, batch x n, Tensors.
-      output_size: int, second dimension of W[i].
-      bias: boolean, whether to add a bias term or not.
-      bias_initializer: starting value to initialize the bias
-        (default is all zeros).
-      weight_initializer: starting value to initialize the weight.
-      reuse_weights: a string or list of strings defining which weights should be reused.
-
-    Returns:
-      A 2D Tensor with shape [batch x output_size] equal to
-      sum_i(args[i] * W[i]), where W[i]s are newly created matrices for each W[i] not to be reused.
-
-    Raises:
-      ValueError: if some of the arguments has unspecified or wrong shape.
-      LookupError: if a weight name specified to be reused does not appear in the list of weights.
-    """
-    if args is None or (nest.is_sequence(args) and not args):
-        raise ValueError("`args` must be specified")
-    if weight_names is None or (nest.is_sequence(weight_names) and not weight_names):
-        raise ValueError("`weight_names` must be specified")
-    if not nest.is_sequence(args):
-        args = [args]
-    if not nest.is_sequence(weight_names):
-        weight_names = [weight_names]
-    if reuse_weights is not None:
-        if not nest.is_sequence(reuse_weights):
-            reuse_weights = [reuse_weights]
-        for w in reuse_weights:
-            if w not in weight_names:
-                raise LookupError("'%s' in `reuse_weights` not found in `weight_names`" % str(w))
-
-    # for each variable in 'args' there needs to be exactly one in "weights", plus bias
-    if bias:
-        if len(weight_names) != len(args) + 1:
-            raise ValueError("If `bias` is True, `weight_names` needs to be one element longer than `args`,"
-                             " but found: %d and %d, respectively" % (len(weight_names), len(args)))
-    else:
-        if len(weight_names) != len(args):
-            raise ValueError("If `bias` is False, `weight_names` and `args` need to be of the same length,"
-                             " but found: %d and %d, respectively" % (len(weight_names), len(args)))
-
-    dtype = [a.dtype for a in args][0]
-
-    # Now the computation.
-    scope = vs.get_variable_scope()
-    with vs.variable_scope(scope) as outer_scope:
-        summands = []
-        for i, x in enumerate(args):
-            reuse = True if reuse_weights is not None and weight_names[i] in reuse_weights else None
-            with vs.variable_scope(outer_scope, reuse=reuse):
-                weight = vs.get_variable(
-                    name=weight_names[i], shape=[x.get_shape()[1].value, output_size],
-                    dtype=dtype,
-                    initializer=weight_initializer)
-            summands.append(math_ops.matmul(x, weight))
-            print(x.get_shape()[1].value, output_size)
-        res = math_ops.add_n(summands)
-        if bias:
-            reuse = True if reuse_weights is not None and weight_names[-1] in reuse_weights else None
-            with vs.variable_scope(outer_scope, reuse=reuse) as inner_scope:
-                inner_scope.set_partitioner(None)
-                if bias_initializer is None:
-                    bias_initializer = init_ops.constant_initializer(0.0, dtype=dtype)
-                b = vs.get_variable(
-                    name=weight_names[-1], shape=[output_size],
-                    dtype=dtype,
-                    initializer=bias_initializer)
-                res = nn_ops.bias_add(res, b)
-        return res

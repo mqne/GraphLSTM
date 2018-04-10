@@ -142,13 +142,14 @@ class DummyReturnTfGLSTMCell(glstm.GraphLSTMCell):
 
 # feeds its GraphLSTMCell the same neighbour_states vector each timestep
 class DummyNeighbourHelperNet(orig_rci.RNNCell):
-    def __init__(self, cell, neighbour_states, name=None, shared_weights_scope=None):
+    def __init__(self, cell, neighbour_states, name=None, shared_scope=None, shared_weights=glstm.ALL_SHARED):
         super(DummyNeighbourHelperNet, self).__init__(name=name)
         assert isinstance(cell, glstm.GraphLSTMCell)
         self._cell = cell
         # neighbour_states dimensions: num_neighbours, batch_size, num_units
         self._neighbour_states = neighbour_states
-        self._shared_weights_scope = shared_weights_scope
+        self._shared_scope = shared_scope
+        self._shared_weights = shared_weights
 
     @property
     def state_size(self):
@@ -162,11 +163,11 @@ class DummyNeighbourHelperNet(orig_rci.RNNCell):
         return self._cell.zero_state(batch_size, dtype)
 
     def call(self, inputs, state):
-        if self._shared_weights_scope is not None:
-            sws = self._shared_weights_scope
+        if self._shared_scope is not None:
+            sws = self._shared_scope
         else:
             sws = tf.get_variable_scope()
-        return self._cell(inputs, state, self._neighbour_states, sws, glstm.ALL_GLOBAL)
+        return self._cell(inputs, state, self._neighbour_states, sws, self._shared_weights)
 
 
 # for overriding _graphlstm_linear in graph_lstm.py, returns vector of 'value' of expected output size
@@ -850,10 +851,12 @@ class TestGraphLSTMCell(tf.test.TestCase):
                                        for t in range(1, time_steps + 1)], 0, 1)
 
         scope = tf.get_variable_scope()
+
+        # force reuse=True for shared variables
         with tf.variable_scope("rnn/dhnet", reuse=True) as init_scope:
             pass
         helper_net = DummyNeighbourHelperNet(glstm_cell, cell_neighbour_states_t4, name="dhnet",
-                                             shared_weights_scope=init_scope)
+                                             shared_scope=init_scope, shared_weights=glstm.ALL_SHARED)
 
         # initialize weights to specific values
         # note: the scope name is sensitive to changes in the architecture of the test
@@ -886,7 +889,7 @@ class TestGraphLSTMCell(tf.test.TestCase):
                 tf.get_variable(name=b, shape=[num_units], initializer=tf.constant_initializer(i-12))
 
         # force reuse=True for all variables in order to use variables as initialized above
-        with tf.variable_scope(scope, reuse=True) as reuse_scope:
+        with tf.variable_scope(scope) as reuse_scope:
             with self.test_session() as sess:
                 return_tensor = tf.nn.dynamic_rnn(helper_net, cell_inputs, dtype=tf.float32)
 
@@ -957,7 +960,7 @@ class TestGraphLSTMCellAndNet(tf.test.TestCase):
             np.testing.assert_allclose(rcn_cdab_actual_result[0], rcn_cdab_t4_expected_output)
             np.testing.assert_allclose(rcn_cdab_actual_result[1], rcn_cdab_t4_expected_final_state)
 
-    @unittest.skip
+    @unittest.skip  # todo, preferably with NEIGHBOUR_CONNECTIONS_SHARED
     def test_full_cell_in_full_net(self):
         # basically repeat the last test from TestGraphLSTMNet.test_call_multinodal_tf
         # with real GraphLSTMCells
