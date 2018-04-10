@@ -37,30 +37,35 @@ _CELL = "cell"
 _CONFIDENCE = "confidence"
 _INDEX = "index"
 
-# templates for which weights should be shared between cells
-ALL_LOCAL = []
-ALL_GLOBAL = [
+# cell weight names # todo: is this the right place to put them?
+_WEIGHTS = {
     "W_u",
     "W_f",
     "W_c",
-    "W_o",
+    "W_o"}
+
+_UEIGHTS = {
     "U_u",
     "U_f",
     "U_c",
-    "U_o",
+    "U_o"}
+
+_NEIGHBOUR_UEIGHTS = {
     "U_un",
     "U_fn",
     "U_cn",
-    "U_on",
+    "U_on"}
+
+_BIASES = {
     "b_u",
     "b_f",
     "b_c",
-    "b_o"]
-NEIGHBOUR_CONNECTIONS_GLOBAL = [
-    "U_un",
-    "U_fn",
-    "U_cn",
-    "U_on"]
+    "b_o"}
+
+# templates for which weights should be shared between cells
+ALL_LOCAL = set()
+ALL_GLOBAL = {*_WEIGHTS, *_UEIGHTS, *_NEIGHBOUR_UEIGHTS, *_BIASES}
+NEIGHBOUR_CONNECTIONS_GLOBAL = {*_NEIGHBOUR_UEIGHTS}
 
 
 class GraphLSTMCell(RNNCell):
@@ -88,23 +93,44 @@ class GraphLSTMCell(RNNCell):
     > that follows.
     """
 
-    def __init__(self, num_units, forget_bias=1.0,
-                 state_is_tuple=True, activation=None, reuse=None, name=None):
+    # DO NOT TAMPER WITH THESE without changing this file's global sets of weight names too
+    # weight names # todo: are those necessary here?
+    _w_u = "W_u"
+    _w_f = "W_f"
+    _w_c = "W_c"
+    _w_o = "W_o"
+    _u_u = "U_u"
+    _u_f = "U_f"
+    _u_c = "U_c"
+    _u_o = "U_o"
+    _u_un = "U_un"
+    _u_fn = "U_fn"
+    _u_cn = "U_cn"
+    _u_on = "U_on"
+    # bias names
+    _b_u = "b_u"
+    _b_f = "b_f"
+    _b_c = "b_c"
+    _b_o = "b_o"
+
+    def __init__(self, num_units, state_is_tuple=True, bias_initializer=None, weight_initializer=None,
+                 reuse=None, name=None):
         """Initialize the Graph LSTM cell.
 
         Args:
           num_units: int, The number of units in the Graph LSTM cell.
-          forget_bias: float, The bias added to forget gates (see above).
-            Must set to `0.0` manually when restoring from CudnnLSTM-trained
-            checkpoints. This parameter is currently ignored.
           state_is_tuple: If True, accepted and returned states are 2-tuples of
             the `c_state` and `m_state`.  If False, they are concatenated
             along the column axis.  The latter behavior will soon be deprecated.
-          activation: Activation function of the inner states.  Default: `tanh`.
-            This parameter is currently ignored.
+          bias_initializer: The initializer that should be used for initializing
+            biases. If None, _init_weights uses a constant initializer of 0.
+          weight_initializer: The initializer that should be used for initializing
+            weights. If None, the Tensorflow standard initializer is used.
           reuse: (optional) Python boolean describing whether to reuse variables
             in an existing scope.  If not `True`, and the existing scope already has
             the given variables, an error is raised.
+          name: (optional) The name that will be used for this cell in the
+            Tensorflow namespace.
 
           When restoring from CudnnLSTM-trained checkpoints, must use
           CudnnCompatibleLSTMCell instead.
@@ -115,9 +141,9 @@ class GraphLSTMCell(RNNCell):
                          "If it works, it is likely to be slower and will soon be "
                          "deprecated.  Use state_is_tuple=True.", self)
         self._num_units = num_units
-        self._forget_bias = forget_bias  # this parameter is currently ignored
         self._state_is_tuple = state_is_tuple
-        self._activation = activation or math_ops.tanh  # this parameter is currently ignored
+        self._bias_initializer = bias_initializer
+        self._weight_initializer = weight_initializer
 
     @property
     def state_size(self):
@@ -127,6 +153,85 @@ class GraphLSTMCell(RNNCell):
     @property
     def output_size(self):
         return self._num_units
+
+    def _get_weight_shape(self, weight, inputs):
+        """Calculate the shape of a Graph LSTM weight.
+
+        Those variables starting with "W" are multiplied with the input,
+        those with "U" with the state of either the cell or neighbouring cells,
+        and biases don't depend on anything other than the output size.
+        This function calculates the corresponding shape.
+
+        Args:
+          weight: The name of the weight.
+          inputs: `2-D` tensor with shape `[batch_size x input_size]`,
+            the input to the cell.
+
+        Returns:
+          A tuple the shape of the weight.
+
+        Raises:
+          NotImplementedError: If a non-standard weight name is encountered.
+        """
+        if weight in _WEIGHTS:
+            return tuple([inputs.get_shape()[1], self.output_size])
+        if weight in _UEIGHTS | _NEIGHBOUR_UEIGHTS:
+            return tuple([self.state_size[1][1] if self._state_is_tuple else self.state_size/2, self.output_size])
+        if weight in _BIASES:
+            return tuple(self.output_size)
+        raise NotImplementedError("Inferring shape for non-standard Graph LSTM cell weights is not supported")
+
+    def _init_weights(self, inputs):
+        """Initialize the weights.
+
+        Args:
+          inputs: `2-D` tensor with shape `[batch_size x input_size]`,
+            the input to the cell. Needed for calculating weight shapes.
+
+        Returns:
+          A dict of weight name:tensorflow-weight pairs.
+        """
+        weight_dict = {}
+        dtype = inputs.dtype
+
+        bias_initializer = init_ops.constant_initializer(0.0, dtype=dtype) if self._bias_initializer is None \
+            else self._bias_initializer
+
+        # initialize shared weights
+        with vs.variable_scope(self._shared_weights_scope) as scope:
+            for weight_name in self._shared_weights:
+                if weight_name not in _BIASES:
+                    weight = vs.get_variable(
+                        name=weight_name, shape=self._get_weight_shape(weight_name, inputs),
+                        dtype=dtype,
+                        initializer=self._weight_initializer)
+                else:
+                    with vs.variable_scope(scope) as bias_scope:
+                        bias_scope.set_partitioner(None)
+                        weight = vs.get_variable(
+                            name=weight_name, shape=self._get_weight_shape(weight_name, inputs),
+                            dtype=dtype,
+                            initializer=bias_initializer)
+
+                weight_dict[weight_name] = weight
+
+        # initialize private weights
+        for weight_name in _WEIGHTS | _UEIGHTS | _NEIGHBOUR_UEIGHTS:
+            if weight_name not in self._shared_weights:
+                weight = vs.get_variable(
+                    name=weight_name, shape=self._get_weight_shape(weight_name, inputs),
+                    dtype=dtype,
+                    initializer=self._weight_initializer)
+                weight_dict[weight_name] = weight
+        for weight_name in _BIASES:
+            if weight_name not in self._shared_weights:
+                weight = vs.get_variable(
+                    name=weight_name, shape=self._get_weight_shape(weight_name, inputs),
+                    dtype=dtype,
+                    initializer=bias_initializer)
+                weight_dict[weight_name] = weight
+
+        return weight_dict
 
     def __call__(self, inputs, state, neighbour_states, shared_weights_scope, shared_weights, *args, **kwargs):
         """Store neighbour_states as cell variable and call superclass.
@@ -154,7 +259,7 @@ class GraphLSTMCell(RNNCell):
         """
         self._neighbour_states = neighbour_states
         self._shared_weights_scope = shared_weights_scope
-        self._shared_weights_scope = shared_weights
+        self._shared_weights = shared_weights
         return super(GraphLSTMCell, self).__call__(inputs, state, *args, **kwargs)
 
     def call(self, inputs, state):
@@ -174,6 +279,9 @@ class GraphLSTMCell(RNNCell):
         """
         sigmoid = math_ops.sigmoid
         tanh = math_ops.tanh
+
+        # initialize cell weights
+        weight_dict = self._init_weights(inputs)
 
         # Parameters of gates are concatenated into one multiply for efficiency.
         if self._state_is_tuple:
@@ -562,9 +670,6 @@ class GraphLSTMNet(RNNCell):
         # TODO: initialize global variables here in network, hand dict of global variables to cell.
         # cell initializes local variables
 
-        # initialize scope for weights shared between all cells
-        shared_weights_scope = vs.variable_scope("shared_weights")
-
         new_states = [None] * self._nxgraph.number_of_nodes()
         graph_output = [None] * self._nxgraph.number_of_nodes()
 
@@ -631,6 +736,7 @@ class GraphLSTMNet(RNNCell):
         return graph_output, new_states
 
 
+# TODO: rewrite _graphlstm_linear without initializations
 # calculates terms like W * f + U * h + b
 def _graphlstm_linear(weight_names, args,
                       output_size,
