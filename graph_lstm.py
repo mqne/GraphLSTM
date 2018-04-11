@@ -37,30 +37,49 @@ _CELL = "cell"
 _CONFIDENCE = "confidence"
 _INDEX = "index"
 
-# cell weight names # todo: is this the right place to put them?
+# weight names
+_W_U = "W_u"
+_W_F = "W_f"
+_W_C = "W_c"
+_W_O = "W_o"
+_U_U = "U_u"
+_U_F = "U_f"
+_U_C = "U_c"
+_U_O = "U_o"
+_U_UN = "U_un"
+_U_FN = "U_fn"
+_U_CN = "U_cn"
+_U_ON = "U_on"
+# bias names
+_B_U = "b_u"
+_B_F = "b_f"
+_B_C = "b_c"
+_B_O = "b_o"
+
+# weight groups
 _WEIGHTS = {
-    "W_u",
-    "W_f",
-    "W_c",
-    "W_o"}
+    _W_U,
+    _W_F,
+    _W_C,
+    _W_O}
 
 _UEIGHTS = {
-    "U_u",
-    "U_f",
-    "U_c",
-    "U_o"}
+    _U_U,
+    _U_F,
+    _U_C,
+    _U_O}
 
 _NEIGHBOUR_UEIGHTS = {
-    "U_un",
-    "U_fn",
-    "U_cn",
-    "U_on"}
+    _U_UN,
+    _U_FN,
+    _U_CN,
+    _U_ON}
 
 _BIASES = {
-    "b_u",
-    "b_f",
-    "b_c",
-    "b_o"}
+    _B_U,
+    _B_F,
+    _B_C,
+    _B_O}
 
 # templates for which weights should be shared between cells
 NONE_SHARED = set()
@@ -92,26 +111,6 @@ class GraphLSTMCell(RNNCell):
     > For advanced models, please use the full @{tf.nn.rnn_cell.LSTMCell}
     > that follows.
     """
-
-    # DO NOT TAMPER WITH THESE without changing this file's global sets of weight names too
-    # weight names # todo: are those necessary here?
-    _w_u = "W_u"
-    _w_f = "W_f"
-    _w_c = "W_c"
-    _w_o = "W_o"
-    _u_u = "U_u"
-    _u_f = "U_f"
-    _u_c = "U_c"
-    _u_o = "U_o"
-    _u_un = "U_un"
-    _u_fn = "U_fn"
-    _u_cn = "U_cn"
-    _u_on = "U_on"
-    # bias names
-    _b_u = "b_u"
-    _b_f = "b_f"
-    _b_c = "b_c"
-    _b_o = "b_o"
 
     def __init__(self, num_units, state_is_tuple=True, bias_initializer=None, weight_initializer=None,
                  reuse=None, name=None):
@@ -212,10 +211,9 @@ class GraphLSTMCell(RNNCell):
                             name=weight_name, shape=self._get_weight_shape(weight_name, inputs),
                             dtype=dtype,
                             initializer=bias_initializer)
-
                 weight_dict[weight_name] = weight
 
-        # initialize private weights
+        # initialize local weights
         for weight_name in _WEIGHTS | _UEIGHTS | _NEIGHBOUR_UEIGHTS:
             if weight_name not in self._shared_weights:
                 weight = vs.get_variable(
@@ -301,7 +299,6 @@ class GraphLSTMCell(RNNCell):
         # neighbours. However, we want cells specifically trained for certain joint, so information about which
         # neighbouring cell belongs to which node might be interesting ... kind of a "hard wired" Graph LSTM
         # But: that's good! -> Own contribution, learn generic hand model / even learn individual hand sizes?
-        # TODO: maybe implement hand-specific version
 
         # self._neighbour_states: a list of n `LSTMStateTuples` of state tensors (m_j, h_j)
         if not hasattr(self, "_neighbour_states"):
@@ -320,22 +317,22 @@ class GraphLSTMCell(RNNCell):
         h_j_avg = math_ops.reduce_mean(h_j_all, axis=0)
 
         # fetch weights and biases
-        w_u = weight_dict[self._w_u]
-        w_f = weight_dict[self._w_f]
-        w_c = weight_dict[self._w_c]
-        w_o = weight_dict[self._w_o]
-        u_u = weight_dict[self._u_u]
-        u_f = weight_dict[self._u_f]
-        u_c = weight_dict[self._u_c]
-        u_o = weight_dict[self._u_o]
-        u_un = weight_dict[self._u_un]
-        u_fn = weight_dict[self._u_fn]
-        u_cn = weight_dict[self._u_cn]
-        u_on = weight_dict[self._u_on]
-        b_u = weight_dict[self._b_u]
-        b_f = weight_dict[self._b_f]
-        b_c = weight_dict[self._b_c]
-        b_o = weight_dict[self._b_o]
+        w_u = weight_dict[_W_U]
+        w_f = weight_dict[_W_F]
+        w_c = weight_dict[_W_C]
+        w_o = weight_dict[_W_O]
+        u_u = weight_dict[_U_U]
+        u_f = weight_dict[_U_F]
+        u_c = weight_dict[_U_C]
+        u_o = weight_dict[_U_O]
+        u_un = weight_dict[_U_UN]
+        u_fn = weight_dict[_U_FN]
+        u_cn = weight_dict[_U_CN]
+        u_on = weight_dict[_U_ON]
+        b_u = weight_dict[_B_U]
+        b_f = weight_dict[_B_F]
+        b_c = weight_dict[_B_C]
+        b_o = weight_dict[_B_O]
 
         # Eq. 2
         # input gate
@@ -469,7 +466,7 @@ class GraphLSTMNet(RNNCell):
                     if num_units < 1:
                         raise ValueError("num_units must be a positive integer, but found: %i" % num_units)
                     num_units_type_checked_flag = True
-                nxgraph.nodes[node_name][_CELL] = GraphLSTMCell(num_units, name="GraphLSTMCell_" + str(node_name),
+                nxgraph.nodes[node_name][_CELL] = GraphLSTMCell(num_units, name="graph_lstm_cell_" + str(node_name),
                                                                 **graphlstmcell_kwargs)
         if verify and not GraphLSTMNet.is_valid_nxgraph(nxgraph, raise_errors=False, ignore_cell_type=ignore_cell_type,
                                                         allow_selfloops=allow_selfloops):
@@ -522,7 +519,7 @@ class GraphLSTMNet(RNNCell):
                     node_attr_lookuperr = "_CONFIDENCE"
                 if node_attr_lookuperr is not None:
                     raise KeyError("Node '%s' has no attribute %s" % (node_name, node_attr_lookuperr))
-                if not ignore_cell_type:  # todo: verify same output size for all cells?
+                if not ignore_cell_type:  # todo: verify same output size for all cells? does that make sense?
                     if not isinstance(nxgraph.nodes[node_name][_CELL], GraphLSTMCell):
                         raise TypeError("Cell of node '%s' is not a GraphLSTMCell. "
                                         "If this is expected, consider running is_valid_nxgraph with "
@@ -548,7 +545,7 @@ class GraphLSTMNet(RNNCell):
             return True
 
     @staticmethod
-    def transpose_output_from_cells_first_to_batch_first(output, time_major=False):
+    def transpose_output_from_cells_first_to_batch_first(output, time_major=False):  # todo this might be obsolete
         """Transpose a GraphLSTMNet output to the tf.nn.dynamic_rnn input format.
 
         GraphLSTMNet accepts input in the shape [batch_size, number_of_nodes, inputs_size],
@@ -624,8 +621,6 @@ class GraphLSTMNet(RNNCell):
                                  "state_is_tuple is not set.  State sizes are: %s"
                                  % str([self._cell(n).state_size for n in self._nxgraph]))
 
-        # TODO init weights (W*, U*, U*n, b*) here for global weights
-
     @property
     def state_size(self):
         if self._state_is_tuple:
@@ -666,8 +661,7 @@ class GraphLSTMNet(RNNCell):
 
         # weights shared between cells (e.g. Ufn) and weights unique for each cell (e.g. Uf): how to handle?
         # ^this is for global Ufn local Un, which is NOT in the original paper! Paper: everything is global
-        # TODO: all weights global, tf.AUTO_REUSE in cell? init all weights in net?
-        # TODO: initialize global variables here in network, hand dict of global variables to cell.
+        # TODO: remove this comment after writing about it in thesis
         # cell initializes local variables
 
         new_states = [None] * self._nxgraph.number_of_nodes()
@@ -683,9 +677,10 @@ class GraphLSTMNet(RNNCell):
             #     cell_scope = "node_%s" % node_name
 
             # initialize scope for weights shared between all cells
-            shared_weights_scope = vs.variable_scope("shared_weights", reuse=True if it > 0 else None)
+            with vs.variable_scope("shared_weights", reuse=True if it > 0 else None) as shared_scope:
+                pass
 
-            with vs.variable_scope("node_%s" % node_name):  # TODO: variable scope here? in other places?
+            with vs.variable_scope("node_%s" % node_name):
                 # extract GraphLSTMCell object from graph node
                 cell = node_obj[_CELL]
                 # extract node index for state vector addressing
@@ -723,7 +718,7 @@ class GraphLSTMNet(RNNCell):
                 cur_inp = inputs[:, i]
                 # run current cell
                 cur_output, new_state = cell(cur_inp, cur_state, neighbour_states,
-                                             shared_weights_scope, self._shared_weights)
+                                             shared_scope, self._shared_weights)
                 # store cell output and state in graph vector
                 graph_output[i] = cur_output
                 new_states[i] = new_state

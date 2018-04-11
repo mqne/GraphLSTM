@@ -62,7 +62,7 @@ class DummyFixedTfCell(orig_rci.RNNCell):
 
     def call(self, inputs, state):
         scope = tf.get_variable_scope()
-        with tf.variable_scope(scope) as outer_scope:
+        with tf.variable_scope(scope):
             return self._h, (self._m, self._h)
 
 
@@ -202,33 +202,37 @@ class DummyGraphlstmLinear:
 
 
 # this is basically a numpy implementation of a GraphLSTM cell with fixed weights for cross-verification
-def get_expected_state_full(cell_input, t, batch_size, num_units, neighbours_m_values, neighbours_h_values):
+def get_expected_state_full(cell_input, t, batch_size, num_units, neighbours_m_values, neighbours_h_values, 
+                            weight_dict):
 
         if t <= 0:
             return orig_rci.LSTMStateTuple(np.zeros([batch_size, num_units]), np.zeros([batch_size, num_units]))
 
-        # these values depend on the initializers in TestGraphLSTMCell.test_call_full
-        w_u = 1
-        w_f = 2
-        w_c = 3
-        w_o = 4
-        u_u = 5
-        u_f = 6
-        u_c = 7
-        u_o = 8
-        u_un = 9
-        u_fn = 10
-        u_cn = 11
-        u_on = 12
-        b_u = -12
-        b_f = -11
-        b_c = -10
-        b_o = -9
+        w_u = weight_dict[glstm._W_U]
+        w_f = weight_dict[glstm._W_F]
+        w_c = weight_dict[glstm._W_C]
+        w_o = weight_dict[glstm._W_O]
+        u_u = weight_dict[glstm._U_U]
+        u_f = weight_dict[glstm._U_F]
+        u_c = weight_dict[glstm._U_C]
+        u_o = weight_dict[glstm._U_O]
+        u_un = weight_dict[glstm._U_UN]
+        u_fn = weight_dict[glstm._U_FN]
+        u_cn = weight_dict[glstm._U_CN]
+        u_on = weight_dict[glstm._U_ON]
+        b_u = weight_dict[glstm._B_U]
+        b_f = weight_dict[glstm._B_F]
+        b_c = weight_dict[glstm._B_C]
+        b_o = weight_dict[glstm._B_O]
 
-        h_avg = np.average(neighbours_h_values, axis=0)
+        neighbours_h_values_current = neighbours_h_values[-1]
+        neighbours_m_values_current = neighbours_m_values[-1]
+
+        h_avg = np.average(neighbours_h_values_current, axis=0)
 
         m_old, h_old = get_expected_state_full(cell_input, t - 1, batch_size, num_units,
-                                               neighbours_m_values, neighbours_h_values)
+                                               neighbours_m_values[:-1], neighbours_h_values[:-1],
+                                               weight_dict)
 
         g_f = sigmoid(cell_input[:, t - 1] * w_f + h_old * u_f + b_f)
         g_u = sigmoid(cell_input[:, t - 1] * w_u + h_old * u_u + h_avg * u_un + b_u)
@@ -236,7 +240,7 @@ def get_expected_state_full(cell_input, t, batch_size, num_units, neighbours_m_v
         g_c = np.tanh(cell_input[:, t - 1] * w_c + h_old * u_c + h_avg * u_cn + b_c)
 
         m = np.average([sigmoid(cell_input[:, t - 1] * w_f + h_j * u_fn + b_f) * m_j
-                        for m_j, h_j in zip(neighbours_m_values, neighbours_h_values)], axis=0) \
+                        for m_j, h_j in zip(neighbours_m_values_current, neighbours_h_values_current)], axis=0) \
             + g_f * m_old + g_u * g_c
         h = np.tanh(g_o * m)
 
@@ -291,7 +295,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
         for n in ['a', 'b', 'c']:
             self.assertIsInstance(v_graph.node[n][_CELL], glstm.GraphLSTMCell)
             self.assertEqual(v_graph.node[n][_CELL].output_size, 6)
-            self.assertEqual(v_graph.node[n][_CELL].name, "GraphLSTMCell_" + n)
+            self.assertEqual(v_graph.node[n][_CELL].name, "graph_lstm_cell_" + n)
 
         # **kwargs
         # invalid keyword
@@ -840,21 +844,12 @@ class TestGraphLSTMCell(tf.test.TestCase):
 
         cell_neighbour_states_t4 = (state_neighbour_1_t4, state_neighbour_2_t4)
 
-        # state shape: state_size 2, batch_size 2, output_size 3
-        expected_final_state = get_expected_state_full(cell_inputs_values, time_steps, batch_size, num_units,
-                                                       [neighbour_state_1_values_c, neighbour_state_2_values_c],
-                                                       [neighbour_state_1_values_h, neighbour_state_2_values_h])
-        expected_output = np.swapaxes([get_expected_state_full(cell_inputs_values, t, batch_size, num_units,
-                                                               [neighbour_state_1_values_c, neighbour_state_2_values_c],
-                                                               [neighbour_state_1_values_h, neighbour_state_2_values_h]
-                                                               )[1]
-                                       for t in range(1, time_steps + 1)], 0, 1)
-
         scope = tf.get_variable_scope()
 
         # force reuse=True for shared variables
         with tf.variable_scope("rnn/dhnet", reuse=True) as init_scope:
             pass
+
         helper_net = DummyNeighbourHelperNet(glstm_cell, cell_neighbour_states_t4, name="dhnet",
                                              shared_scope=init_scope, shared_weights=glstm.ALL_SHARED)
 
@@ -864,29 +859,46 @@ class TestGraphLSTMCell(tf.test.TestCase):
 
             # weight and bias names (copied from GraphLSTMCell.call) # and values
             weights = [
-                "W_u",    # 1
-                "W_f",    # 2
-                "W_c",    # 3
-                "W_o",    # 4
-                "U_u",    # 5
-                "U_f",    # 6
-                "U_c",    # 7
-                "U_o",    # 8
-                "U_un",   # 9
-                "U_fn",  # 10
-                "U_cn",  # 11
-                "U_on"]  # 12
+                glstm._W_U,    # 1
+                glstm._W_F,    # 2
+                glstm._W_C,    # 3
+                glstm._W_O,    # 4
+                glstm._U_U,    # 5
+                glstm._U_F,    # 6
+                glstm._U_C,    # 7
+                glstm._U_O,    # 8
+                glstm._U_UN,   # 9
+                glstm._U_FN,  # 10
+                glstm._U_CN,  # 11
+                glstm._U_ON]  # 12
             biases = [
-                "b_u",  # -12
-                "b_f",  # -11
-                "b_c",  # -10
-                "b_o"]   # -9
+                glstm._B_U,  # -12
+                glstm._B_F,  # -11
+                glstm._B_C,  # -10
+                glstm._B_O]   # -9
+
+            weight_dict = {}
 
             # initialize variables via tf.get_variable()
             for i, w in enumerate(weights):
                 tf.get_variable(name=w, shape=[num_units, num_units], initializer=tf.initializers.identity(i+1))
+                weight_dict[w] = i+1
             for i, b in enumerate(biases):
                 tf.get_variable(name=b, shape=[num_units], initializer=tf.constant_initializer(i-12))
+                weight_dict[b] = i-12
+
+        # state shape: state_size 2, batch_size 2, output_size 3
+        expected_final_state = get_expected_state_full(cell_inputs_values, time_steps, batch_size, num_units,
+                                                       [[neighbour_state_1_values_c, neighbour_state_2_values_c]]*4,
+                                                       [[neighbour_state_1_values_h, neighbour_state_2_values_h]]*4,
+                                                       weight_dict)
+        expected_output = np.swapaxes([get_expected_state_full(cell_inputs_values, t, batch_size, num_units,
+                                                               [[neighbour_state_1_values_c,
+                                                                 neighbour_state_2_values_c]] * 4,
+                                                               [[neighbour_state_1_values_h,
+                                                                 neighbour_state_2_values_h]] * 4,
+                                                               weight_dict)[1]
+                                       for t in range(1, time_steps + 1)], 0, 1)
 
         # force reuse=True for all variables in order to use variables as initialized above
         with tf.variable_scope(scope) as reuse_scope:
@@ -960,62 +972,197 @@ class TestGraphLSTMCellAndNet(tf.test.TestCase):
             np.testing.assert_allclose(rcn_cdab_actual_result[0], rcn_cdab_t4_expected_output)
             np.testing.assert_allclose(rcn_cdab_actual_result[1], rcn_cdab_t4_expected_final_state)
 
-    @unittest.skip  # todo, preferably with NEIGHBOUR_CONNECTIONS_SHARED
     def test_full_cell_in_full_net(self):
         # basically repeat the last test from TestGraphLSTMNet.test_call_multinodal_tf
         # with real GraphLSTMCells
 
-        # update order: c, d, a, b
-        nxgraph = glstm.GraphLSTMNet.create_nxgraph([['a', 'b'], ['b', 'c'], ['b', 'd'], ['c', 'd']], 1,
-                                                    confidence_dict={"c": 1, "d": 0.9, "a": .6, "b": -2})
-        net = glstm.GraphLSTMNet(nxgraph, shared_weights=True)
+        # graph:
+        #
+        #     +---c
+        # a---b   |
+        #     +---d
 
-        # make return cells with inter-neighbour communication
-        # c increases its state by 1 each timestep, starting from 0
-        # a, b and d return the sum of their neighbouring states
-        return_neighbour_cell_a = DummyReturnTfGLSTMCell(2, return_sum_of_neighbour_states=True)
-        return_neighbour_cell_b = DummyReturnTfGLSTMCell(2, return_sum_of_neighbour_states=True)
-        return_neighbour_cell_c = DummyReturnTfGLSTMCell(2, add_one_to_state_per_timestep=True)
-        return_neighbour_cell_d = DummyReturnTfGLSTMCell(2, return_sum_of_neighbour_states=True)
+        batch_size = 2
+
+        # update order: c, d, a, b
+        nxgraph = glstm.GraphLSTMNet.create_nxgraph([['a', 'b'], ['b', 'c'], ['b', 'd'], ['c', 'd']], 2,
+                                                    confidence_dict={"c": 1, "d": 0.9, "a": .6, "b": -2})
+
+        net = glstm.GraphLSTMNet(nxgraph, shared_weights=glstm.NEIGHBOUR_CONNECTIONS_SHARED, name="full_net")
+
+        # make GraphLSTM cells with custom initializers
+        # c is the node with the highest confidence, i.e. will be initialized first, i.e. will lend its initializers
+        #   to the shared weights
+        cell_a = glstm.GraphLSTMCell(2, bias_initializer=tf.constant_initializer(1),
+                                     weight_initializer=tf.initializers.identity(1))
+        cell_b = glstm.GraphLSTMCell(2, bias_initializer=tf.constant_initializer(2),
+                                     weight_initializer=tf.initializers.identity(2))
+        cell_c = glstm.GraphLSTMCell(2, bias_initializer=tf.constant_initializer(-1),
+                                     weight_initializer=tf.initializers.identity(-1))
+        cell_d = glstm.GraphLSTMCell(2, bias_initializer=tf.constant_initializer(-2),
+                                     weight_initializer=tf.initializers.identity(-2))
+
+        weight_dict_a = {
+            glstm._W_U: 1,
+            glstm._W_F: 1,
+            glstm._W_C: 1,
+            glstm._W_O: 1,
+            glstm._U_U: 1,
+            glstm._U_F: 1,
+            glstm._U_C: 1,
+            glstm._U_O: 1,
+            glstm._U_UN: -1,
+            glstm._U_FN: -1,
+            glstm._U_CN: -1,
+            glstm._U_ON: -1,
+            glstm._B_U: 1,
+            glstm._B_F: 1,
+            glstm._B_C: 1,
+            glstm._B_O: 1,
+        }
+        weight_dict_b = {
+            glstm._W_U: 2,
+            glstm._W_F: 2,
+            glstm._W_C: 2,
+            glstm._W_O: 2,
+            glstm._U_U: 2,
+            glstm._U_F: 2,
+            glstm._U_C: 2,
+            glstm._U_O: 2,
+            glstm._U_UN: -1,
+            glstm._U_FN: -1,
+            glstm._U_CN: -1,
+            glstm._U_ON: -1,
+            glstm._B_U: 2,
+            glstm._B_F: 2,
+            glstm._B_C: 2,
+            glstm._B_O: 2,
+        }
+        weight_dict_c = {
+            glstm._W_U: -1,
+            glstm._W_F: -1,
+            glstm._W_C: -1,
+            glstm._W_O: -1,
+            glstm._U_U: -1,
+            glstm._U_F: -1,
+            glstm._U_C: -1,
+            glstm._U_O: -1,
+            glstm._U_UN: -1,
+            glstm._U_FN: -1,
+            glstm._U_CN: -1,
+            glstm._U_ON: -1,
+            glstm._B_U: -1,
+            glstm._B_F: -1,
+            glstm._B_C: -1,
+            glstm._B_O: -1,
+        }
+        weight_dict_d = {
+            glstm._W_U: -2,
+            glstm._W_F: -2,
+            glstm._W_C: -2,
+            glstm._W_O: -2,
+            glstm._U_U: -2,
+            glstm._U_F: -2,
+            glstm._U_C: -2,
+            glstm._U_O: -2,
+            glstm._U_UN: -1,
+            glstm._U_FN: -1,
+            glstm._U_CN: -1,
+            glstm._U_ON: -1,
+            glstm._B_U: -2,
+            glstm._B_F: -2,
+            glstm._B_C: -2,
+            glstm._B_O: -2,
+        }
 
         # input size 2, 4 nodes: [? ? 4 2]
         input_data_rcn_cdab = tf.placeholder(tf.float32, [None, None, 4, 2])
 
-        # time sequence of state values:
-        #   t   a   b   c   d
-        #   1   0   2   1   1
-        #   2   2   11  2   5
-        #   3   13  46  3   19
-        #   4   59  178 4   69
+        # batch size 2, 2 timesteps, number_of_nodes 4, input/output size 2: [2 4 4 2]
+        full_cdab_tx_input_values = np.ones([batch_size, 2, 4, 2])
+        feed_dict_full_cdab_tx = {input_data_rcn_cdab: full_cdab_tx_input_values}
 
-        # batch size 2, 4 timesteps, number_of_nodes 4, input/output size 2: [2 4 4 2]
-        rcn_cdab_t4_values = np.random.rand(2, 4, 4, 2)
-        feed_dict_rcn_cdab_t4 = {input_data_rcn_cdab: rcn_cdab_t4_values}
-        # state shape: number_of_nodes 4, state_size 2, batch_size 2, output_size 3
-        rcn_cdab_t4_expected_output = -np.swapaxes(np.swapaxes(rcn_cdab_t4_values, 0, 2), 1, 2)
-        rcn_cdab_t4_expected_final_state = (
-            np.zeros([2, 2, 2]) + 59, np.zeros([2, 2, 2]) + 178, np.zeros([2, 2, 2]) + 4, np.zeros([2, 2, 2]) + 69)
+        # t = 0
+        state_d_0 = glstm.LSTMStateTuple(np.zeros([batch_size, cell_d._num_units]),
+                                         np.zeros([batch_size, cell_d._num_units]))
+        state_b_0 = glstm.LSTMStateTuple(np.zeros([batch_size, cell_b._num_units]),
+                                         np.zeros([batch_size, cell_b._num_units]))
+
+        # t = 1
+        state_c_1 = get_expected_state_full(full_cdab_tx_input_values[:, :, 2], t=1, batch_size=2, num_units=2,
+                                            neighbours_m_values=[np.asarray(
+                                                (state_b_0[0], state_d_0[0]))],
+                                            neighbours_h_values=[np.asarray(
+                                                (state_b_0[1], state_d_0[1]))],
+                                            weight_dict=weight_dict_c)
+        state_d_1 = get_expected_state_full(full_cdab_tx_input_values[:, :, 3], 1, 2, 2,
+                                            [np.asarray((state_b_0[0], state_c_1[0]))],
+                                            [np.asarray((state_b_0[1], state_c_1[1]))], weight_dict_d)
+        state_a_1 = get_expected_state_full(full_cdab_tx_input_values[:, :, 0], 1, 2, 2,
+                                            [np.asarray((state_b_0[0]))],
+                                            [np.asarray((state_b_0[1]))], weight_dict_a)
+        state_b_1 = get_expected_state_full(full_cdab_tx_input_values[:, :, 1], 1, 2, 2,
+                                            [np.asarray((state_a_1[0], state_c_1[0], state_d_1[0]))],
+                                            [np.asarray((state_a_1[1], state_c_1[1], state_d_1[1]))], weight_dict_b)
+        # t = 2
+        state_c_2 = get_expected_state_full(full_cdab_tx_input_values[:, :, 2], 2, 2, 2,
+                                            [np.asarray((state_b_0[0], state_d_0[0])),
+                                            np.asarray((state_b_1[0], state_d_1[0]))],
+                                            [np.asarray((state_b_0[1], state_d_0[1])),
+                                            np.asarray((state_b_1[1], state_d_1[1]))], weight_dict_c)
+        state_d_2 = get_expected_state_full(full_cdab_tx_input_values[:, :, 3], 2, 2, 2,
+                                            [np.asarray((state_b_0[0], state_c_1[0])),
+                                            np.asarray((state_b_1[0], state_c_2[0]))],
+                                            [np.asarray((state_b_0[1], state_c_1[1])),
+                                            np.asarray((state_b_1[1], state_c_2[1]))], weight_dict_d)
+        state_a_2 = get_expected_state_full(full_cdab_tx_input_values[:, :, 0], 2, 2, 2,
+                                            [np.asarray((state_b_0[0])),
+                                            np.asarray((state_b_1[0]))],
+                                            [np.asarray((state_b_0[1])),
+                                            np.asarray((state_b_1[1]))], weight_dict_a)
+        state_b_2 = get_expected_state_full(full_cdab_tx_input_values[:, :, 1], 2, 2, 2,
+                                            [np.asarray((state_a_1[0], state_c_1[0], state_d_1[0])),
+                                            np.asarray((state_a_2[0], state_c_2[0], state_d_2[0]))],
+                                            [np.asarray((state_a_1[1], state_c_1[1], state_d_1[1])),
+                                            np.asarray((state_a_2[1], state_c_2[1], state_d_2[1]))], weight_dict_b)
+
+        # return value of GraphLSTMNet: graph_output, new_states
+        # return value of DummyFixedTfCell: output, (state, output)
+        # return value of DummyReturnTfCell: input, state
+        # return value of dynamic_rnn: output [number_of_nodes, batch_size, max_time, cell.output_size],
+        #   final_state [number_of_nodes, state_size (2 for LSTM), batch_size, output_size]
+
+        all_states_c = np.asarray((state_c_1, state_c_2))
+        all_states_d = np.asarray((state_d_1, state_d_2))
+        all_states_a = np.asarray((state_a_1, state_a_2))
+        all_states_b = np.asarray((state_b_1, state_b_2))
+
+        expected_final_state = np.asarray(
+            (all_states_a[-1], all_states_b[-1], all_states_c[-1], all_states_d[-1]))
+
+        expected_output = np.asarray(
+            (all_states_a[:, 1], all_states_b[:, 1], all_states_c[:, 1], all_states_d[:, 1])).swapaxes(1, 2)
 
         with self.test_session() as sess:
-            # inject neighbour-aware return cells into network graph
-            # nxgraph.node['a'][_CELL] = return_neighbour_cell_a
-            # nxgraph.node['b'][_CELL] = return_neighbour_cell_b
-            # nxgraph.node['c'][_CELL] = return_neighbour_cell_c
-            # nxgraph.node['d'][_CELL] = return_neighbour_cell_d
+            # inject custom cells into network graph
+            nxgraph.node['a'][_CELL] = cell_a
+            nxgraph.node['b'][_CELL] = cell_b
+            nxgraph.node['c'][_CELL] = cell_c
+            nxgraph.node['d'][_CELL] = cell_d
 
             rcn_cdab_returned_tensors = tf.nn.dynamic_rnn(net, input_data_rcn_cdab, dtype=tf.float32)
 
-            tf.global_variables_initializer()
+            sess.run(tf.global_variables_initializer())
 
             self.assertEqual(len(rcn_cdab_returned_tensors[0]), len(nxgraph),
                              msg="GraphLSTMNet should return %i outputs (equaling number of nodes), but returned %i"
                                  % (len(nxgraph), len(rcn_cdab_returned_tensors[0])))
 
-            # test batch size 2, 4 timesteps
-            rcn_cdab_actual_result = sess.run(rcn_cdab_returned_tensors, feed_dict=feed_dict_rcn_cdab_t4)
+            # test batch size 2, 2 timesteps
+            rcn_cdab_actual_result = sess.run(rcn_cdab_returned_tensors, feed_dict=feed_dict_full_cdab_tx)
 
-            np.testing.assert_allclose(rcn_cdab_actual_result[0], rcn_cdab_t4_expected_output)
-            np.testing.assert_allclose(rcn_cdab_actual_result[1], rcn_cdab_t4_expected_final_state)
+            np.testing.assert_allclose(rcn_cdab_actual_result[0], expected_output, atol=1e-5)
+            np.testing.assert_allclose(rcn_cdab_actual_result[1], expected_final_state, atol=1e-5)
 
 
 class TestGraphLSTMLinear(tf.test.TestCase):
