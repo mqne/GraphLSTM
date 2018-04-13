@@ -1,5 +1,5 @@
 networkx==2.*
-tensorflow
+tensorflow-gpu
 
 # required for unittests
 numpy
