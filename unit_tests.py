@@ -333,33 +333,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
         self.assertIsNot(gnet._cell("t0"), b)
         self.assertIsInstance(gnet._cell("wrist"), glstm.GraphLSTMCell)
 
-    @unittest.skip("'inputs' is a tensor when called by tensorflow. Threw no errors as of 2018-02-27,"
-                   "maybe implement with tensor-input later")
-    def test_call_uninodal_notf(self):
-        cell_input, cell_state_m, cell_state_h, cell_cur_output, cell_new_state = objects(5)
-
-        unet, cname = self.get_uninodal_graphlstmnet()
-
-        # test correct returning of cell return value
-        unet._nxgraph.node[cname][_CELL] = DummyFixedCell((cell_cur_output, cell_new_state)).call
-        net_output = unet.call(([cell_input]), ((cell_state_m, cell_state_h),))
-        expected = ((cell_cur_output,), (cell_new_state,))
-        self.assertEqual(net_output, expected, msg="GraphLSTNet.call() did not return expected objects. "
-                                                   "There is probably an error in GraphLSTMNet AFTER calling the cell.")
-
-        # test correct delivering of parameters to cell
-        unet._nxgraph.node[cname][_CELL] = DummyReturnCell().call
-        net_output = unet.call(([cell_input]), ((cell_state_m, cell_state_h),))
-        expected = (((cell_input, (cell_state_m, cell_state_h), tuple()),),
-                    ((tuple(), (cell_state_m, cell_state_h), cell_input),))
-        self.assertEqual(net_output, expected, msg="GraphLSTNet.call() did not deliver expected objects to cell. "
-                                                   "There is probably an error in GraphLSTMNet BEFORE calling the cell.")
-
-        # check proper index handling: uninodal GraphLSTM should complain about indices > 0
-        unet._nxgraph.node[cname][_INDEX] = 1
-        self.assertRaises(IndexError, unet.call, ([cell_input]), ((cell_state_m, cell_state_h),))
-
-    def test_call_uninodal_tf(self):
+    def test_call_uninodal(self):
         # set up net
         net, cell_name = self.get_uninodal_graphlstmnet()
 
@@ -502,6 +476,10 @@ class TestGraphLSTMNet(tf.test.TestCase):
             np.testing.assert_allclose(rc2_actual_result[0], rc2_expected_result[0], err_msg=msg)
             np.testing.assert_equal(rc2_actual_result[1], rc2_expected_result[1], err_msg=msg)
 
+            # check proper index handling: uninodal GraphLSTM should complain about indices > 0
+            net._nxgraph.node[cell_name][_INDEX] = 1
+            self.assertRaises(IndexError, tf.nn.dynamic_rnn, net, input_data_rc2, dtype=tf.float32)
+
     @staticmethod
     def get_uninodal_graphlstmnet(cell_name="node0", confidence=0):
         graph = nx.Graph()
@@ -510,7 +488,7 @@ class TestGraphLSTMNet(tf.test.TestCase):
         net = glstm.GraphLSTMNet(nxgraph)
         return net, cell_name
 
-    def test_call_multinodal_tf(self):
+    def test_call_multinodal(self):
         # graph:
         #
         #     +---c
@@ -918,7 +896,7 @@ class TestGraphLSTMCellAndNet(tf.test.TestCase):
 
     def test_cell_init_and___call__in_full_net(self):
         # create a DummyReturnTfCell calling/inheriting init and __call__ and test it
-        # basically repeat the last test from TestGraphLSTMNet.test_call_multinodal_tf
+        # basically repeat the last test from TestGraphLSTMNet.test_call_multinodal
         # with a DummyReturnTfGLSTMCell
 
         # update order: c, d, a, b
@@ -972,7 +950,7 @@ class TestGraphLSTMCellAndNet(tf.test.TestCase):
             np.testing.assert_allclose(rcn_cdab_actual_result[1], rcn_cdab_t4_expected_final_state)
 
     def test_full_cell_in_full_net(self):
-        # basically repeat the last test from TestGraphLSTMNet.test_call_multinodal_tf
+        # basically repeat the last test from TestGraphLSTMNet.test_call_multinodal
         # with real GraphLSTMCells
 
         # graph:
@@ -1263,7 +1241,7 @@ def dirty_tests():
 def main():
     dirty_tests()
     with tf.variable_scope("unittest"):
-        # TestGraphLSTMNet.test_call_multinodal_tf(TestGraphLSTMNet())
+        # TestGraphLSTMNet.test_call_multinodal(TestGraphLSTMNet())
         unittest.main()
 
 
