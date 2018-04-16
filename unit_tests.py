@@ -3,7 +3,6 @@ import networkx as nx
 import tensorflow as tf
 import numpy as np
 from tensorflow.python.ops import rnn_cell_impl as orig_rci
-import graph as rci_graph
 import unittest
 import matplotlib.pyplot as plt
 
