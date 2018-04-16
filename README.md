@@ -27,15 +27,13 @@ You also need `numpy` which is automatically installed with Tensorflow.
  - `scipy` for checks executed within the `networkx` library.
 
 #### Installing via Anaconda
+For creating a new [Anaconda](https://www.anaconda.com/download/) environment *graphlstm* with all necessary and recommended packages installed, do the following:
 
-For creating a new [Anaconda](https://www.anaconda.com/download/) environment *graphlstm* with all necessary and recommended packages installed, execute the following inside your repo directory:
+- *Only if you have a GPU with support for CUDA:* Edit the file `requirements.txt` and replace the line `tensorflow` with `tensorflow-gpu`.
 
-*If you have a GPU with support for *CUDA*:*
+Run the following inside your repo directory:
 
 	conda create -n graphlstm --file requirements.txt python=3.6
-*If you do NOT have a GPU with *CUDA* support:*
- 
-Edit the file `requirements.txt` and replace the line `tensorflow-gpu` with `tensorflow`, then run above code.
 
 ## Running the provided test code
 Make sure to have your python environment activated (i.e. for an *Anaconda* installation, run `source activate graphlstm` ).
