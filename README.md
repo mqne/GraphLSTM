@@ -1,5 +1,5 @@
 # GraphLSTM for Hand Pose Estimation
-This repository implements a tensorflow library for hand pose estimation. The network architecture is based on [GraphLSTM (Liang et al.)](https://arxiv.org/abs/1603.07063)
+This repository implements a Tensorflow library for hand pose estimation. The network architecture is based on the [2016 CVPR paper](https://arxiv.org/abs/1603.07063) by Liang et al.
 ## Getting started
 *GraphLSTM* extends the *Tensorflow* framework and is written in Python 3.
 
