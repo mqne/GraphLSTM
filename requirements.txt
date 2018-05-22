@@ -10,3 +10,11 @@ matplotlib
 # not necessary, but needed for networkx conversion tests (will result in ImportWarning):
 pandas
 scipy
+
+# necessary for region-ensemble
+opencv
+keras
+seaborn
+plotly
+h5py
+scikit-learn

@@ -29,7 +29,7 @@ You also need `numpy` which is automatically installed with Tensorflow.
 #### Installing via Anaconda
 For creating a new [Anaconda](https://www.anaconda.com/download/) environment *graphlstm* with all necessary and recommended packages installed, do the following:
 
-- *Only if you have a GPU with support for CUDA:* Edit the file `requirements.txt` and replace the line `tensorflow` with `tensorflow-gpu`.
+- *Only if you have a GPU with support for CUDA:* Edit the file `requirements.txt` and replace the line `tensorflow` with `tensorflow-gpu` as well as the line `keras` with `keras-gpu`.
 
 Run the following inside your repo directory:
 
