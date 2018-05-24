@@ -235,7 +235,11 @@ def image_batch_generator(dataset_root, container_name_list, batch_size):
 # In[8]:
 
 
-class PCA:
+class RegEnPCA:
+    """Helper class for doing PCA for the Region Ensemble network.
+
+     Original implementation by Kai Akiyama, Robotics Vision Lab, NAIST.
+     """
 
     @staticmethod
     def get_mean_and_eigenvectors(train_labels):
@@ -255,7 +259,7 @@ class PCA:
     @staticmethod
     def get_mean_eigenvectors_eigenvalues_with_augment(label_sample_gen, augment_times=0):
         """
-        augment_times=0 ... no augmentation used in PCA
+        augment_times=0 ... no augmentation used in RegEnPCA
         """
         total_num_labels = Const.NUM_TRAIN_SAMPLES * (1 + augment_times)
         pca_label_array = np.zeros([total_num_labels, Const.LABEL_SHAPE])
@@ -268,7 +272,7 @@ class PCA:
                 pca_label_array[i] = alter_label(label, center)
                 i += 1
         assert (i == total_num_labels)
-        return PCA.get_mean_and_eigenvectors(pca_label_array)
+        return RegEnPCA.get_mean_and_eigenvectors(pca_label_array)
 
     def __init__(self, read_values=False):
         if not read_values:
@@ -310,12 +314,13 @@ class PCA:
         return self._pca_eigenvalues
 
 
-pca = PCA()
+pca = RegEnPCA()
 
 # # Model
 
 # In[8]:
 
+# set Keras session
 config = tf.ConfigProto(log_device_placement=True)
 config.gpu_options.allow_growth = True
 set_session(tf.Session(config=config))
@@ -324,6 +329,10 @@ set_session(tf.Session(config=config))
 # In[11]:
 
 class RegEnModel(Model):
+    """Region Ensemble network model.
+
+     Original implementation by Kai Akiyama, Robotics Vision Lab, NAIST.
+     """
 
     def __init__(self):
         super().__init__(self._build_model())
@@ -515,7 +524,15 @@ class RegEnModel(Model):
 
         return image, predict
 
+    # Set PCA bottleneck weights
+    def set_pca_bottleneck_weights(self, reg_en_pca):
+        w = self.get_weights()
+        w[-1] = reg_en_pca.mean
+        w[-2] = reg_en_pca.eigenvectors[:Const.NUM_EIGENVECTORS]
+        self.set_weights(w)
 
+
+# instantiate model
 model = RegEnModel()
 
 
@@ -530,22 +547,15 @@ def soft_loss(y_true, y_pred):
 
 from keras.optimizers import Adam
 
-model.compile(
-    optimizer=Adam(),
-    loss=soft_loss
-)
+model.compile(optimizer=Adam(), loss=soft_loss)
 
-# Set PCA bottleneck weights
-weights = model.get_weights()
-weights[-1] = pca.mean
-weights[-2] = pca.eigenvectors[:Const.NUM_EIGENVECTORS]
-model.set_weights(weights)
+# todo: possible before model.compile? If yes: include in _build_model? If no: override model.compile?
+model.set_pca_bottleneck_weights(pca)
 
 # In[10]:
 
-
+# store PNG image of model
 from keras.utils import plot_model
-
 plot_model(model, to_file='%s/model.png' % prefix, show_shapes=True)
 
 # # Train
