@@ -26,6 +26,14 @@ You also need `numpy` which is automatically installed with Tensorflow.
  - `pandas` and
  - `scipy` for checks executed within the `networkx` library.
 
+For running the *Region Ensemble network*, these packages are additionally required:
+
+- `keras`
+- `seaborn`
+- `plotly`
+- `h5py`
+- `scikit-learn`
+
 #### Installing via Anaconda
 For creating a new [Anaconda](https://www.anaconda.com/download/) environment *graphlstm* with all necessary and recommended packages installed, do the following:
 
@@ -34,6 +42,10 @@ For creating a new [Anaconda](https://www.anaconda.com/download/) environment *g
 Run the following inside your repo directory:
 
 	conda create -n graphlstm --file requirements.txt python=3.6
+
+As `opencv` for Python 3.6 is not available in the default anaconda repositories, you have to install it manually via:
+
+	conda install -n graphlstm -c menpo opencv3
 
 ## Running the provided test code
 Make sure to have your python environment activated (i.e. for an *Anaconda* installation, run `source activate graphlstm` ).
