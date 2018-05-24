@@ -19,6 +19,8 @@
 # - [Test All](#Test-All)
 # - [Generate Zip](#Generate-Zip)
 
+import sys
+sys.path.append("..")
 
 import region_ensemble.model as re
 
