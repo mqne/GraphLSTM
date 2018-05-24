@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # get_ipython().run_line_magic('matplotlib', 'inline')
-sns.set_style("whitegrid")
+#sns.set_style("whitegrid")
 
 # In[2]:
 
@@ -32,7 +32,7 @@ sns.set_style("whitegrid")
 import plotly.offline as py
 import plotly.graph_objs as go
 
-py.init_notebook_mode(connected=True)
+#py.init_notebook_mode(connected=True)
 
 # In[3]:
 
@@ -314,16 +314,16 @@ class RegEnPCA:
         return self._pca_eigenvalues
 
 
-pca = RegEnPCA()
+#pca = RegEnPCA()
 
 # # Model
 
 # In[8]:
 
 # set Keras session
-config = tf.ConfigProto(log_device_placement=True)
-config.gpu_options.allow_growth = True
-set_session(tf.Session(config=config))
+#config = tf.ConfigProto(log_device_placement=True)
+#config.gpu_options.allow_growth = True
+#set_session(tf.Session(config=config))
 
 
 # In[11]:
@@ -533,7 +533,7 @@ class RegEnModel(Model):
 
 
 # instantiate model
-model = RegEnModel()
+#model = RegEnModel()
 
 
 # Smooth L1 loss function from Fan's implementation.
@@ -547,24 +547,24 @@ def soft_loss(y_true, y_pred):
 
 from keras.optimizers import Adam
 
-model.compile(optimizer=Adam(), loss=soft_loss)
+#model.compile(optimizer=Adam(), loss=soft_loss)
 
 # todo: possible before model.compile? If yes: include in _build_model? If no: override model.compile?
-model.set_pca_bottleneck_weights(pca)
+#model.set_pca_bottleneck_weights(pca)
 
 # In[10]:
 
 # store PNG image of model
 from keras.utils import plot_model
-plot_model(model, to_file='%s/model.png' % prefix, show_shapes=True)
+#plot_model(model, to_file='%s/model.png' % prefix, show_shapes=True)
 
 # # Train
 
 # In[18]:
 
 
-train_batch_gen = pair_batch_generator(dataset_root, train_list, Const.TRAIN_BATCH_SIZE, shuffle=True, augmented=True)
-validate_batch_gen = pair_batch_generator(dataset_root, validate_list, Const.VALIDATE_BATCH_SIZE)
+#train_batch_gen = pair_batch_generator(dataset_root, train_list, Const.TRAIN_BATCH_SIZE, shuffle=True, augmented=True)
+#validate_batch_gen = pair_batch_generator(dataset_root, validate_list, Const.VALIDATE_BATCH_SIZE)
 
 
 # In[ ]:
@@ -582,19 +582,19 @@ def lr_schedule(epoch):
 
 from keras.callbacks import LearningRateScheduler, ModelCheckpoint, TensorBoard
 
-history = model.fit_generator(
-    train_batch_gen,
-    steps_per_epoch=Const.NUM_TRAIN_BATCHES,
-    epochs=200,
-    initial_epoch=0,
-    callbacks=[
-        #         LearningRateScheduler(lr_schedule),
-        TensorBoard(log_dir="./%s" % prefix),
-        ModelCheckpoint(
-            filepath='./%s/model.{epoch:02d}.hdf5' % prefix,
-        ),
-    ]
-)
+#history = model.fit_generator(
+#    train_batch_gen,
+#    steps_per_epoch=Const.NUM_TRAIN_BATCHES,
+#    epochs=200,
+#    initial_epoch=0,
+#    callbacks=[
+#        #         LearningRateScheduler(lr_schedule),
+#        TensorBoard(log_dir="./%s" % prefix),
+#        ModelCheckpoint(
+#            filepath='./%s/model.{epoch:02d}.hdf5' % prefix,
+#        ),
+#    ]
+#)
 
 
 # # Plotly
@@ -714,69 +714,69 @@ def plot_scatter3d(image, pred=None, true=None):
 # In[12]:
 
 
-model.load_weights('./%s/model.70.hdf5' % prefix)  # , custom_objects={'soft_loss': soft_loss})
+#model.load_weights('./%s/model.70.hdf5' % prefix)  # , custom_objects={'soft_loss': soft_loss})
 
 # # Validate
 
 # In[13]:
 
 
-validate_image_batch_gen = image_batch_generator(dataset_root, validate_list, Const.VALIDATE_BATCH_SIZE)
+#validate_image_batch_gen = image_batch_generator(dataset_root, validate_list, Const.VALIDATE_BATCH_SIZE)
 
 # In[ ]:
 
 
-predictions = model.predict_generator(
-    validate_image_batch_gen,
-    steps=Const.NUM_VALIDATE_BATCHES
-)
+#predictions = model.predict_generator(
+#    validate_image_batch_gen,
+#    steps=Const.NUM_VALIDATE_BATCHES
+#)
 
 # In[ ]:
 
 
 # mean absolute error
-validate_label_gen = sample_generator(dataset_root, "pose", validate_list)
-validate_label = np.asarray(list(validate_label_gen))
-print("average", np.abs(validate_label - predictions).mean())
+#validate_label_gen = sample_generator(dataset_root, "pose", validate_list)
+#validate_label = np.asarray(list(validate_label_gen))
+#print("average", np.abs(validate_label - predictions).mean())
 
 # # Explore Validate
 
 # In[16]:
 
 
-validate_model_image_gen = sample_generator(dataset_root, "image", train_list, resize_to_shape=Const.MODEL_IMAGE_SHAPE)
-validate_src_image_gen = sample_generator(dataset_root, "image", train_list)
-validate_label_gen = sample_generator(dataset_root, "pose", train_list)
+#validate_model_image_gen = sample_generator(dataset_root, "image", train_list, resize_to_shape=Const.MODEL_IMAGE_SHAPE)
+#validate_src_image_gen = sample_generator(dataset_root, "image", train_list)
+#validate_label_gen = sample_generator(dataset_root, "pose", train_list)
 
 # In[17]:
 
 
-validate_model_image = next(validate_model_image_gen)
-validate_src_image = next(validate_src_image_gen)
-validate_label = next(validate_label_gen)
-validate_uvd = model.predict(np.asarray([validate_model_image]))
+#validate_model_image = next(validate_model_image_gen)
+#validate_src_image = next(validate_src_image_gen)
+#validate_label = next(validate_label_gen)
+#validate_uvd = model.predict(np.asarray([validate_model_image]))
 
 # In[18]:
 
 
-plot_scatter3d(validate_src_image, pred=validate_uvd, true=validate_label)
+#plot_scatter3d(validate_src_image, pred=validate_uvd, true=validate_label)
 
 # # Explore Test
 
 # In[17]:
 
 
-test_model_image_gen = sample_generator(testset_root, "image", test_list, resize_to_shape=Const.MODEL_IMAGE_SHAPE)
-test_src_image_gen = sample_generator(testset_root, "image", test_list)
+#test_model_image_gen = sample_generator(testset_root, "image", test_list, resize_to_shape=Const.MODEL_IMAGE_SHAPE)
+#test_src_image_gen = sample_generator(testset_root, "image", test_list)
 
 # In[18]:
 
 
-test_model_image = next(test_model_image_gen)
-test_src_image = next(test_src_image_gen)
-test_uvd = model.predict(np.asarray([test_model_image]))
-plot_scatter2d(test_src_image, pred=test_uvd)
-plot_scatter3d(test_src_image, pred=test_uvd)
+#test_model_image = next(test_model_image_gen)
+#test_src_image = next(test_src_image_gen)
+#test_uvd = model.predict(np.asarray([test_model_image]))
+#plot_scatter2d(test_src_image, pred=test_uvd)
+#plot_scatter3d(test_src_image, pred=test_uvd)
 
 
 # # Test All
@@ -829,23 +829,23 @@ def transform(pose_coor, paras):
 # In[15]:
 
 
-test_image_batch_gen = image_batch_generator(testset_root, test_list, Const.TEST_BATCH_SIZE)
+#test_image_batch_gen = image_batch_generator(testset_root, test_list, Const.TEST_BATCH_SIZE)
 # test_params is already loaded
 
-test_uvd = model.predict_generator(
-    test_image_batch_gen,
-    steps=Const.NUM_TEST_BATCHES,
-    max_queue_size=1000,
-    use_multiprocessing=True,
-    verbose=True,
-)
+#test_uvd = model.predict_generator(
+#    test_image_batch_gen,
+#    steps=Const.NUM_TEST_BATCHES,
+#    max_queue_size=1000,
+#    use_multiprocessing=True,
+#    verbose=True,
+#)
 
 # # Generate Zip
 
 # In[16]:
 
 
-test_param_and_name_gen = param_and_name_generator(testset_root, 'tran_para_img', test_list)
+#test_param_and_name_gen = param_and_name_generator(testset_root, 'tran_para_img', test_list)
 
 
 def test_xyz_and_name_gen():
@@ -856,13 +856,13 @@ def test_xyz_and_name_gen():
         yield xyz, name
 
 
-pose_submit_gen = ("frame\\images\\{}\t{}".format(name, '\t'.join(map(str, xyz)))
-                   for xyz, name
-                   in test_xyz_and_name_gen())
-
-np.savetxt('./%s/result-newtest.txt' % prefix, np.asarray(list(pose_submit_gen)), delimiter='\n', fmt="%s")
+#pose_submit_gen = ("frame\\images\\{}\t{}".format(name, '\t'.join(map(str, xyz)))
+#                   for xyz, name
+#                   in test_xyz_and_name_gen())
+#
+#np.savetxt('./%s/result-newtest.txt' % prefix, np.asarray(list(pose_submit_gen)), delimiter='\n', fmt="%s")
 
 import zipfile
 
-with zipfile.ZipFile("./%s/result-newtest.zip" % prefix, 'w', zipfile.ZIP_DEFLATED) as zf:
-    zf.write("./%s/result-newtest.txt" % prefix, "result.txt")
+#with zipfile.ZipFile("./%s/result-newtest.zip" % prefix, 'w', zipfile.ZIP_DEFLATED) as zf:
+#    zf.write("./%s/result-newtest.txt" % prefix, "result.txt")

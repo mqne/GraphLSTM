@@ -1,4 +1,4 @@
-# this file verifies that the modified region_ensemble.py file works as expected
+# this file verifies that the modified model.py file works as expected
 
 # coding: utf-8
 
@@ -20,7 +20,7 @@
 # - [Generate Zip](#Generate-Zip)
 
 
-import region_ensemble.region_ensemble as re
+import region_ensemble.model as re
 
 import tensorflow as tf
 from keras.backend import set_session
