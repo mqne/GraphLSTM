@@ -54,6 +54,8 @@ from sklearn.decomposition import PCA as SKLEARN_PCA
 import numpy as np
 import scipy as sp
 
+from tqdm import tqdm
+
 
 # In[4]:
 
@@ -85,7 +87,7 @@ class Const:
 # In[5]:
 
 
-prefix = "0926-ren-mid-aug-deeper1"
+prefix = "01-retest"
 
 dataset_root = r"/mnt/nasbi/shared/research/hand-pose-estimation/hands2017/data/hand2017_nor_img_new"
 train_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)] + ["nor_00957032.pkl"]
@@ -118,7 +120,7 @@ def sample_generator(dataset_root, container_dir, container_name_list, resize_to
     #     p = Progbar(len(container_name_list))  # DEBUG: ProgressBar
     container_list = map(lambda container_name: path.join(dataset_root, container_dir, container_name),
                          container_name_list)
-    for i, container in enumerate(container_list):
+    for i, container in tqdm(enumerate(container_list), total=len(train_list), desc='Generating samples:'):
         #         p.update(i)  # DEBUG: ProgressBar
         sample_seq = pd.read_pickle(container, compression='gzip')
         for sample in sample_seq:
@@ -335,7 +337,7 @@ class RegEnModel(Model):
      """
 
     def __init__(self):
-        super().__init__(self._build_model())
+        super().__init__(*self._build_model())
 
     @staticmethod
     def _build_model():

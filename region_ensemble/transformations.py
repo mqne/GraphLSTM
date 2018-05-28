@@ -23,7 +23,7 @@ def get_matrix_2D_3D(center, rot, trans, scale):
     return mat2D, mat3D
 
 
-def transform_image_and_points(image, points, center, rot, trans, trans_d, scale):
+def transform_image_and_points(image, points, center, rot, trans, scale, trans_d=0):
     mat2D, mat3D = get_matrix_2D_3D(center, rot, trans, scale)
     
     out_image = None
