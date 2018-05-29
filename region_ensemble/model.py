@@ -107,7 +107,7 @@ def resize_image(image, to_shape):
     return image
 
 
-def sample_generator(dataset_root, container_dir, container_name_list, resize_to_shape=None):
+def sample_generator(dataset_root, container_dir, container_name_list, resize_to_shape=None, show_progress=False):
     SHAPE_DICT = {
         'image': Const.SRC_IMAGE_SHAPE,
         'pose': Const.LABEL_SHAPE,
@@ -120,7 +120,10 @@ def sample_generator(dataset_root, container_dir, container_name_list, resize_to
     #     p = Progbar(len(container_name_list))  # DEBUG: ProgressBar
     container_list = map(lambda container_name: path.join(dataset_root, container_dir, container_name),
                          container_name_list)
-    for i, container in tqdm(enumerate(container_list), total=len(train_list), desc='Generating samples:'):
+    it = enumerate(container_list)
+    if show_progress:
+        it = tqdm(it, total=len(train_list), desc='Generating samples')
+    for i, container in it:
         #         p.update(i)  # DEBUG: ProgressBar
         sample_seq = pd.read_pickle(container, compression='gzip')
         for sample in sample_seq:
@@ -276,9 +279,9 @@ class RegEnPCA:
         assert (i == total_num_labels)
         return RegEnPCA.get_mean_and_eigenvectors(pca_label_array)
 
-    def __init__(self, read_values=False):
-        if not read_values:
-            train_label_gen = sample_generator(dataset_root, "pose", train_list)
+    def __init__(self, read_samples=False):
+        if not read_samples:
+            train_label_gen = sample_generator(dataset_root, "pose", train_list, show_progress=True)
             self._pca_mean, self._pca_eigenvectors, self._pca_eigenvalues = \
                 self.get_mean_eigenvectors_eigenvalues_with_augment(train_label_gen, augment_times=2)
             self._tofile()

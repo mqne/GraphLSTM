@@ -44,7 +44,7 @@ sns.set_style("whitegrid")
 
 # dataset path declarations
 
-prefix = "region_ensemble_test_0926_01"
+prefix = "01-retest"
 
 dataset_root = r"/mnt/nasbi/shared/research/hand-pose-estimation/hands2017/data/hand2017_nor_img_new"
 train_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)] + ["nor_00957032.pkl"]
@@ -57,13 +57,13 @@ test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.p
 # # Model
 
 # set Keras session
-config = tf.ConfigProto(log_device_placement=True)
+config = tf.ConfigProto(log_device_placement=True, allow_soft_placement=True)
 config.gpu_options.allow_growth = True
 set_session(tf.Session(config=config))
 
 # instantiate model
 
-pca = re.RegEnPCA()
+pca = re.RegEnPCA(read_samples=True)
 model = re.RegEnModel()
 
 model.compile(optimizer=Adam(), loss=re.soft_loss)

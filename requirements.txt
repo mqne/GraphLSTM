@@ -18,6 +18,7 @@ plotly
 h5py
 scikit-learn
 tqdm
+pydot
 
 # additionally, the package 'opencv3' needs to be installed manually via 
 # 'conda install -n $YOUR_ENVIRONMENT_NAME -c menpo opencv3'
