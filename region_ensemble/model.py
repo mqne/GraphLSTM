@@ -87,7 +87,7 @@ class Const:
 # In[5]:
 
 
-prefix = "01-retest"
+# prefix = "01-retest"
 
 dataset_root = r"/mnt/nasbi/shared/research/hand-pose-estimation/hands2017/data/hand2017_nor_img_new"
 train_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)] + ["nor_00957032.pkl"]
@@ -237,9 +237,6 @@ def image_batch_generator(dataset_root, container_name_list, batch_size):
 
 # # PCA
 
-# In[8]:
-
-
 class RegEnPCA:
     """Helper class for doing PCA for the Region Ensemble network.
 
@@ -279,7 +276,8 @@ class RegEnPCA:
         assert (i == total_num_labels)
         return RegEnPCA.get_mean_and_eigenvectors(pca_label_array)
 
-    def __init__(self, read_samples=False):
+    def __init__(self, directory_prefix, read_samples=False):
+        self._directory_prefix = directory_prefix
         if not read_samples:
             train_label_gen = sample_generator(dataset_root, "pose", train_list, show_progress=True)
             self._pca_mean, self._pca_eigenvectors, self._pca_eigenvalues = \
@@ -289,15 +287,15 @@ class RegEnPCA:
             self._fromfile()
 
     def _tofile(self):
-        self._pca_mean.tofile("%s/pca_mean.npy" % prefix)
-        self._pca_eigenvectors.tofile("%s/pca_eigenvectors.npy" % prefix)
-        self._pca_eigenvalues.tofile("%s/pca_eigenvalues.npy" % prefix)
+        self._pca_mean.tofile("%s/pca_mean.npy" % self._directory_prefix)
+        self._pca_eigenvectors.tofile("%s/pca_eigenvectors.npy" % self._directory_prefix)
+        self._pca_eigenvalues.tofile("%s/pca_eigenvalues.npy" % self._directory_prefix)
 
     def _fromfile(self):
-        self._pca_mean = np.fromfile("%s/pca_mean.npy" % prefix)
-        self._pca_eigenvectors = np.fromfile("%s/pca_eigenvectors.npy" % prefix).reshape([Const.LABEL_SHAPE,
-                                                                                          Const.LABEL_SHAPE])
-        self._pca_eigenvalues = np.fromfile("%s/pca_eigenvalues.npy" % prefix)
+        self._pca_mean = np.fromfile("%s/pca_mean.npy" % self._directory_prefix)
+        self._pca_eigenvectors = np.fromfile("%s/pca_eigenvectors.npy" % self._directory_prefix).reshape(
+            [Const.LABEL_SHAPE, Const.LABEL_SHAPE])
+        self._pca_eigenvalues = np.fromfile("%s/pca_eigenvalues.npy" % self._directory_prefix)
 
     def plot(self):
         plt.subplot(2, 1, 1)
@@ -319,19 +317,7 @@ class RegEnPCA:
         return self._pca_eigenvalues
 
 
-#pca = RegEnPCA()
-
 # # Model
-
-# In[8]:
-
-# set Keras session
-#config = tf.ConfigProto(log_device_placement=True)
-#config.gpu_options.allow_growth = True
-#set_session(tf.Session(config=config))
-
-
-# In[11]:
 
 class RegEnModel(Model):
     """Region Ensemble network model.
@@ -339,8 +325,13 @@ class RegEnModel(Model):
      Original implementation by Kai Akiyama, Robotics Vision Lab, NAIST.
      """
 
-    def __init__(self):
+    def __init__(self, directory_prefix):
         super().__init__(*self._build_model())
+        self._directory_prefix = directory_prefix
+
+    @property
+    def directory_prefix(self):
+        return self._directory_prefix
 
     @staticmethod
     def _build_model():
@@ -537,10 +528,6 @@ class RegEnModel(Model):
         self.set_weights(w)
 
 
-# instantiate model
-#model = RegEnModel()
-
-
 # Smooth L1 loss function from Fan's implementation.
 def soft_loss(y_true, y_pred):
     x = tf.abs(y_true - y_pred)
@@ -550,30 +537,7 @@ def soft_loss(y_true, y_pred):
     return loss
 
 
-from keras.optimizers import Adam
-
-#model.compile(optimizer=Adam(), loss=soft_loss)
-
-# todo: possible before model.compile? If yes: include in _build_model? If no: override model.compile?
-#model.set_pca_bottleneck_weights(pca)
-
-# In[10]:
-
-# store PNG image of model
-from keras.utils import plot_model
-#plot_model(model, to_file='%s/model.png' % prefix, show_shapes=True)
-
 # # Train
-
-# In[18]:
-
-
-#train_batch_gen = pair_batch_generator(dataset_root, train_list, Const.TRAIN_BATCH_SIZE, shuffle=True, augmented=True)
-#validate_batch_gen = pair_batch_generator(dataset_root, validate_list, Const.VALIDATE_BATCH_SIZE)
-
-
-# In[ ]:
-
 
 def lr_schedule(epoch):
     initial = 0.005
@@ -585,27 +549,7 @@ def lr_schedule(epoch):
     return lr
 
 
-from keras.callbacks import LearningRateScheduler, ModelCheckpoint, TensorBoard
-
-#history = model.fit_generator(
-#    train_batch_gen,
-#    steps_per_epoch=Const.NUM_TRAIN_BATCHES,
-#    epochs=200,
-#    initial_epoch=0,
-#    callbacks=[
-#        #         LearningRateScheduler(lr_schedule),
-#        TensorBoard(log_dir="./%s" % prefix),
-#        ModelCheckpoint(
-#            filepath='./%s/model.{epoch:02d}.hdf5' % prefix,
-#        ),
-#    ]
-#)
-
-
 # # Plotly
-
-# In[10]:
-
 
 def nodes_to_finger_edges(nodes):
     nodes = nodes.reshape([21, 3])

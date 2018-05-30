@@ -19,6 +19,7 @@
 # - [Test All](#Test-All)
 # - [Generate Zip](#Generate-Zip)
 
+# add parent directory to path for model access
 import sys
 sys.path.append("..")
 
@@ -63,8 +64,8 @@ set_session(tf.Session(config=config))
 
 # instantiate model
 
-pca = re.RegEnPCA(read_samples=True)
-model = re.RegEnModel()
+pca = re.RegEnPCA(directory_prefix=prefix, read_samples=True)
+model = re.RegEnModel(directory_prefix=prefix)
 
 model.compile(optimizer=Adam(), loss=re.soft_loss)
 
@@ -72,7 +73,7 @@ model.compile(optimizer=Adam(), loss=re.soft_loss)
 model.set_pca_bottleneck_weights(pca)
 
 # store PNG image of model
-plot_model(model, to_file='%s/model.png' % prefix, show_shapes=True)
+plot_model(model, to_file='%s/model.png' % model.directory_prefix, show_shapes=True)
 
 
 # # Train
@@ -80,17 +81,19 @@ plot_model(model, to_file='%s/model.png' % prefix, show_shapes=True)
 train_batch_gen = re.pair_batch_generator(dataset_root, train_list, re.Const.TRAIN_BATCH_SIZE, shuffle=True, augmented=True)
 validate_batch_gen = re.pair_batch_generator(dataset_root, validate_list, re.Const.VALIDATE_BATCH_SIZE)
 
+# Load Weights
+model.load_weights('./%s/model.14.hdf5' % model.directory_prefix)  # , custom_objects={'soft_loss': soft_loss})
 
 history = model.fit_generator(
     train_batch_gen,
     steps_per_epoch=re.Const.NUM_TRAIN_BATCHES,
     epochs=200,
-    initial_epoch=0,
+    initial_epoch=14,
     callbacks=[
         #         LearningRateScheduler(lr_schedule),
-        TensorBoard(log_dir="./%s" % prefix),
+        TensorBoard(log_dir="./%s" % model.directory_prefix),
         ModelCheckpoint(
-            filepath='./%s/model.{epoch:02d}.hdf5' % prefix,
+            filepath='./%s/model.{epoch:02d}.hdf5' % model.directory_prefix,
         ),
     ]
 )
