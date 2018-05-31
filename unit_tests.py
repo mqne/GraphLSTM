@@ -277,6 +277,17 @@ class TestGraphLSTMNet(tf.test.TestCase):
         self.assertRaises(KeyError, cg, v_template, 1, confidence_dict={"z": 1})
         # confidence_dict may not contain invalid confidence values
         self.assertRaises(ValueError, cg, v_template, 1, confidence_dict={"a": "A"})
+        # index_dict must be a dict
+        self.assertRaises(TypeError, cg, v_template, 1, index_dict=False)
+        # index_dict must have correct length
+        self.assertRaises(ValueError, cg, v_template, 1, index_dict={"a": 0})
+        # index_dict may not contain invalid index values
+        self.assertRaises(ValueError, cg, v_template, 1, index_dict={"a": "A", "b": 0, "c": 1})
+        self.assertRaises(TypeError, cg, v_template, 1, index_dict={"a": [], "b": 0, "c": 1})
+        # index_dict may not contain invalid node names
+        self.assertRaises(KeyError, cg, v_template, 1, index_dict={"z": 1, "b": 0, "c": 2})
+        # index_dict must equal range(len(nxgraph))
+        self.assertRaises(ValueError, cg, v_template, 1, index_dict={"a": 1, "b": 3, "c": 2})
 
         # valid graph, valid keywords
         v_graph = cg(v_template, 6, confidence_dict={"a": .3, "c": -500})
@@ -295,6 +306,11 @@ class TestGraphLSTMNet(tf.test.TestCase):
             self.assertIsInstance(v_graph.node[n][_CELL], glstm.GraphLSTMCell)
             self.assertEqual(v_graph.node[n][_CELL].output_size, 6)
             self.assertEqual(v_graph.node[n][_CELL].name, "graph_lstm_cell_" + n)
+        # test valid custom indices
+        v_graph = cg(v_template, 6, confidence_dict={"a": .3, "c": -500}, index_dict={"a": 1, "b": 0, "c": 2})
+        self.assertEqual(v_graph.node['a'][_INDEX], 1)
+        self.assertEqual(v_graph.node['b'][_INDEX], 0)
+        self.assertEqual(v_graph.node['c'][_INDEX], 2)
 
         # **kwargs
         # invalid keyword

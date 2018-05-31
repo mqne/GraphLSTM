@@ -400,8 +400,8 @@ class GraphLSTMNet(RNNCell):
         return nxgraph.nodes[node][_CELL]
 
     @staticmethod
-    def create_nxgraph(list_or_nxgraph, num_units=None, confidence_dict=None, is_sorted=False, verify=True,
-                       ignore_cell_type=False, allow_selfloops=False, **graphlstmcell_kwargs):
+    def create_nxgraph(list_or_nxgraph, num_units=None, confidence_dict=None, index_dict=None, is_sorted=False,
+                       verify=True, ignore_cell_type=False, allow_selfloops=False, **graphlstmcell_kwargs):
         """Return a GraphLSTM Network graph (composed of GraphLSTMCells).
 
         Args:
@@ -413,6 +413,9 @@ class GraphLSTMNet(RNNCell):
           confidence_dict (dict): Holds the confidence values for the nodes that should
             start off with a confidence value different from 0. Optional.
             Format: {node_name_1: confidence_1, ...}
+          index_dict (dict): Holds the index values for all nodes if the indices should
+            be custom. If not None, parameter is_sorted is ignored. Optional.
+            Format: {node_name_1: index_1, ...}
           is_sorted (bool): If True, the _INDEX parameter will be assigned in the native
             order of elements as seen in list_or_nxgraph. If False, _INDEX will
             correspond to the order given by sorted() (default).
@@ -450,8 +453,23 @@ class GraphLSTMNet(RNNCell):
             if _CONFIDENCE not in node_dict:
                 nxgraph.nodes[node_name][_CONFIDENCE] = 0.
         # register index
-        for index, node_name in enumerate(sorted(nxgraph) if not is_sorted else nxgraph):
-            nxgraph.nodes[node_name][_INDEX] = index
+        if index_dict is not None:
+            if not isinstance(index_dict, dict):
+                raise TypeError("index_dict must be of type 'dict', but found '%s'." % type(index_dict))
+            if len(index_dict) != len(nxgraph):
+                raise ValueError("index_dict must have as many entries as nxgraph has nodes (%i), but found %i"
+                                 % (len(index_dict), len(nxgraph)))
+            if sorted([int(x) for x in index_dict.values()]) != list(range(len(nxgraph))):
+                raise ValueError("index_dict must contain indices ranging from 0 to number of nodes - 1, but saw\n"
+                                 "%r" % sorted(index_dict.values()))
+            for node_name, index in index_dict.items():
+                try:
+                    nxgraph.nodes[node_name][_INDEX] = int(index)
+                except KeyError as e:
+                    raise KeyError("Node '%s' in index_dict does not exist in nxgraph." % node_name) from e
+        else:
+            for index, node_name in enumerate(sorted(nxgraph) if not is_sorted else nxgraph):
+                nxgraph.nodes[node_name][_INDEX] = index
         # register cells
         num_units_type_checked_flag = False
         for node_name, node_dict in nxgraph.nodes(data=True):
