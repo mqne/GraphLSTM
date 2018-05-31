@@ -355,7 +355,7 @@ class RegEnModel(Model):
                                 kernel_size=(3, 3),
                                 padding='same',
                                 activation='relu',
-                                )(image)
+                                )(com)  # todo: this was changed from (image) to (com), as model is probably better that way, but: comparability to Kai's evaluated model?
 
             com = MaxPooling2D(pool_size=(2, 2),
                                padding='same'
@@ -667,7 +667,7 @@ def plot_scatter3d(image, pred=None, true=None):
 # In[12]:
 
 
-#model.load_weights('./%s/model.70.hdf5' % prefix)  # , custom_objects={'soft_loss': soft_loss})
+#region_ensemble_net.load_weights('./%s/model.70.hdf5' % prefix)  # , custom_objects={'soft_loss': soft_loss})
 
 # # Validate
 
@@ -679,7 +679,7 @@ def plot_scatter3d(image, pred=None, true=None):
 # In[ ]:
 
 
-#predictions = model.predict_generator(
+#predictions = region_ensemble_net.predict_generator(
 #    validate_image_batch_gen,
 #    steps=Const.NUM_VALIDATE_BATCHES
 #)
@@ -707,7 +707,7 @@ def plot_scatter3d(image, pred=None, true=None):
 #validate_model_image = next(validate_model_image_gen)
 #validate_src_image = next(validate_src_image_gen)
 #validate_label = next(validate_label_gen)
-#validate_uvd = model.predict(np.asarray([validate_model_image]))
+#validate_uvd = region_ensemble_net.predict(np.asarray([validate_model_image]))
 
 # In[18]:
 
@@ -727,7 +727,7 @@ def plot_scatter3d(image, pred=None, true=None):
 
 #test_model_image = next(test_model_image_gen)
 #test_src_image = next(test_src_image_gen)
-#test_uvd = model.predict(np.asarray([test_model_image]))
+#test_uvd = region_ensemble_net.predict(np.asarray([test_model_image]))
 #plot_scatter2d(test_src_image, pred=test_uvd)
 #plot_scatter3d(test_src_image, pred=test_uvd)
 
@@ -782,26 +782,26 @@ def transform(pose_coor, paras):
 # In[15]:
 
 
-#test_image_batch_gen = image_batch_generator(testset_root, test_list, Const.TEST_BATCH_SIZE)
-# test_params is already loaded
-
-#test_uvd = model.predict_generator(
-#    test_image_batch_gen,
-#    steps=Const.NUM_TEST_BATCHES,
-#    max_queue_size=1000,
-#    use_multiprocessing=True,
-#    verbose=True,
-#)
-
 # # Generate Zip
 
 # In[16]:
 
 
-#test_param_and_name_gen = param_and_name_generator(testset_root, 'tran_para_img', test_list)
+def test_xyz_and_name_gen(model, testset_root, test_list):
 
+    test_image_batch_gen = image_batch_generator(testset_root, test_list, Const.TEST_BATCH_SIZE)
+    # test_params is already loaded
 
-def test_xyz_and_name_gen():
+    test_uvd = model.predict_generator(
+        test_image_batch_gen,
+        steps=Const.NUM_TEST_BATCHES,
+        max_queue_size=1000,
+        use_multiprocessing=True,
+        verbose=True,
+    )
+
+    test_param_and_name_gen = param_and_name_generator(testset_root, 'tran_para_img', test_list)
+
     for uvd, param_and_name in zip(test_uvd, test_param_and_name_gen):
         parm = param_and_name[0]
         name = param_and_name[1]

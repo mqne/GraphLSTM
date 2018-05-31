@@ -1,3 +1,4 @@
 # JetBrains' IDE files
 .idea
 __pycache__
+*train*/

@@ -1,4 +1,4 @@
-# this file verifies that the modified model.py file works as expected
+# this file verifies that the modified region_ensemble_net.py file works as expected
 
 # coding: utf-8
 
@@ -81,22 +81,22 @@ plot_model(model, to_file='%s/model.png' % model.directory_prefix, show_shapes=T
 train_batch_gen = re.pair_batch_generator(dataset_root, train_list, re.Const.TRAIN_BATCH_SIZE, shuffle=True, augmented=True)
 validate_batch_gen = re.pair_batch_generator(dataset_root, validate_list, re.Const.VALIDATE_BATCH_SIZE)
 
-# Load Weights
-model.load_weights('./%s/model.30.hdf5' % model.directory_prefix)  # , custom_objects={'soft_loss': soft_loss})
-
-history = model.fit_generator(
-    train_batch_gen,
-    steps_per_epoch=re.Const.NUM_TRAIN_BATCHES,
-    epochs=200,
-    initial_epoch=30,
-    callbacks=[
-        #         LearningRateScheduler(lr_schedule),
-        TensorBoard(log_dir="./%s" % model.directory_prefix),
-        ModelCheckpoint(
-            filepath='./%s/model.{epoch:02d}.hdf5' % model.directory_prefix,
-        ),
-    ]
-)
+# # Load Weights
+# model.load_weights('./%s/model.30.hdf5' % model.directory_prefix)  # , custom_objects={'soft_loss': soft_loss})
+#
+# history = model.fit_generator(
+#     train_batch_gen,
+#     steps_per_epoch=re.Const.NUM_TRAIN_BATCHES,
+#     epochs=200,
+#     initial_epoch=30,
+#     callbacks=[
+#         #         LearningRateScheduler(lr_schedule),
+#         TensorBoard(log_dir="./%s" % model.directory_prefix),
+#         ModelCheckpoint(
+#             filepath='./%s/model.{epoch:02d}.hdf5' % model.directory_prefix,
+#         ),
+#     ]
+# )
 
 
 # # Load Weights
@@ -110,7 +110,7 @@ validate_image_batch_gen = re.image_batch_generator(dataset_root, validate_list,
 
 predictions = model.predict_generator(
     validate_image_batch_gen,
-    steps=re.Const.NUM_VALIDATE_BATCHES
+    steps=re.Const.NUM_VALIDATE_BATCHES, verbose=1
 )
 
 # mean absolute error
@@ -118,7 +118,7 @@ validate_label_gen = re.sample_generator(dataset_root, "pose", validate_list)
 validate_label = np.asarray(list(validate_label_gen))
 print("average", np.abs(validate_label - predictions).mean())
 
-"""
+
 # # Explore Validate
 
 validate_model_image_gen = re.sample_generator(dataset_root, "image", train_list, resize_to_shape=re.Const.MODEL_IMAGE_SHAPE)
@@ -166,10 +166,10 @@ test_param_and_name_gen = re.param_and_name_generator(testset_root, 'tran_para_i
 
 pose_submit_gen = ("frame\\images\\{}\t{}".format(name, '\t'.join(map(str, xyz)))
                    for xyz, name
-                   in re.test_xyz_and_name_gen())
+                   in re.test_xyz_and_name_gen(model, testset_root=testset_root, test_list=test_list))
 
 np.savetxt('./%s/result-newtest.txt' % prefix, np.asarray(list(pose_submit_gen)), delimiter='\n', fmt="%s")
 
 with zipfile.ZipFile("./%s/result-newtest.zip" % prefix, 'w', zipfile.ZIP_DEFLATED) as zf:
     zf.write("./%s/result-newtest.txt" % prefix, "result.txt")
-"""
+
