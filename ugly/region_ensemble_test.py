@@ -64,7 +64,7 @@ set_session(tf.Session(config=config))
 
 # instantiate model
 
-pca = re.RegEnPCA(directory_prefix=prefix, read_samples=True)
+pca = re.RegEnPCA(directory_prefix=prefix, use_precalculated_samples=True)#, dataset_root=dataset_root, train_list=train_list)
 model = re.RegEnModel(directory_prefix=prefix)
 
 model.compile(optimizer=Adam(), loss=re.soft_loss)
@@ -82,13 +82,13 @@ train_batch_gen = re.pair_batch_generator(dataset_root, train_list, re.Const.TRA
 validate_batch_gen = re.pair_batch_generator(dataset_root, validate_list, re.Const.VALIDATE_BATCH_SIZE)
 
 # Load Weights
-model.load_weights('./%s/model.14.hdf5' % model.directory_prefix)  # , custom_objects={'soft_loss': soft_loss})
+model.load_weights('./%s/model.30.hdf5' % model.directory_prefix)  # , custom_objects={'soft_loss': soft_loss})
 
 history = model.fit_generator(
     train_batch_gen,
     steps_per_epoch=re.Const.NUM_TRAIN_BATCHES,
     epochs=200,
-    initial_epoch=14,
+    initial_epoch=30,
     callbacks=[
         #         LearningRateScheduler(lr_schedule),
         TensorBoard(log_dir="./%s" % model.directory_prefix),
@@ -98,10 +98,10 @@ history = model.fit_generator(
     ]
 )
 
-"""
+
 # # Load Weights
 
-model.load_weights('./%s/model.70.hdf5' % prefix)  # , custom_objects={'soft_loss': soft_loss})
+model.load_weights('./%s/model.30.hdf5' % prefix)  # , custom_objects={'soft_loss': soft_loss})
 
 
 # # Validate
@@ -118,7 +118,7 @@ validate_label_gen = re.sample_generator(dataset_root, "pose", validate_list)
 validate_label = np.asarray(list(validate_label_gen))
 print("average", np.abs(validate_label - predictions).mean())
 
-
+"""
 # # Explore Validate
 
 validate_model_image_gen = re.sample_generator(dataset_root, "image", train_list, resize_to_shape=re.Const.MODEL_IMAGE_SHAPE)

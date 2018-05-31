@@ -89,12 +89,12 @@ class Const:
 
 # prefix = "01-retest"
 
-dataset_root = r"/mnt/nasbi/shared/research/hand-pose-estimation/hands2017/data/hand2017_nor_img_new"
-train_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)] + ["nor_00957032.pkl"]
-validate_list = []
+# dataset_root = r"/mnt/nasbi/shared/research/hand-pose-estimation/hands2017/data/hand2017_nor_img_new"
+# train_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)] + ["nor_00957032.pkl"]
+# validate_list = []
 
-testset_root = r"/mnt/nasbi/shared/research/hand-pose-estimation/hands2017/data/hand2017_test_0914"
-test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.pkl"]
+# testset_root = r"/mnt/nasbi/shared/research/hand-pose-estimation/hands2017/data/hand2017_test_0914"
+# test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.pkl"]
 
 
 # In[6]:
@@ -122,7 +122,7 @@ def sample_generator(dataset_root, container_dir, container_name_list, resize_to
                          container_name_list)
     it = enumerate(container_list)
     if show_progress:
-        it = tqdm(it, total=len(train_list), desc='Generating samples')
+        it = tqdm(it, total=len(container_name_list), desc='Generating samples')
     for i, container in it:
         #         p.update(i)  # DEBUG: ProgressBar
         sample_seq = pd.read_pickle(container, compression='gzip')
@@ -276,9 +276,13 @@ class RegEnPCA:
         assert (i == total_num_labels)
         return RegEnPCA.get_mean_and_eigenvectors(pca_label_array)
 
-    def __init__(self, directory_prefix, read_samples=False):
+    def __init__(self, directory_prefix, use_precalculated_samples=False, dataset_root=None, train_list=None):
         self._directory_prefix = directory_prefix
-        if not read_samples:
+        if not use_precalculated_samples:
+            if dataset_root is None:
+                raise ValueError("Must define `dataset_root` directory when reading samples for PCA calculation")
+            if train_list is None:
+                raise ValueError("Must define train_list namespace when reading samples for PCA calculation")
             train_label_gen = sample_generator(dataset_root, "pose", train_list, show_progress=True)
             self._pca_mean, self._pca_eigenvectors, self._pca_eigenvalues = \
                 self.get_mean_eigenvectors_eigenvalues_with_augment(train_label_gen, augment_times=2)
