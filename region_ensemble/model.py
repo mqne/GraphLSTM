@@ -614,7 +614,7 @@ def plot_scatter2d(image, pred=None, true=None):
         margin={'l': 0, 'r': 200, 'b': 0, 't': 0},
     )
     fig = go.Figure(data=data, layout=layout)
-    py.iplot(fig)
+    py.plot(fig)
 
 
 def plot_scatter3d(image, pred=None, true=None):
@@ -659,7 +659,7 @@ def plot_scatter3d(image, pred=None, true=None):
         margin={'l': 0, 'r': 0, 'b': 0, 't': 0},
     )
     fig = go.Figure(data=data, layout=layout)
-    py.iplot(fig)
+    py.plot(fig)
 
 
 # # Load Weights

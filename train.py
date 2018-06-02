@@ -54,6 +54,7 @@ config = tf.ConfigProto(log_device_placement=True, allow_soft_placement=True)
 config.gpu_options.allow_growth = True
 K.set_session(tf.Session(config=config))
 
+
 # initialize region_ensemble_net
 
 region_ensemble_net_pca = re.RegEnPCA(directory_prefix=prefix, use_precalculated_samples=False,
@@ -62,12 +63,10 @@ region_ensemble_net = re.RegEnModel(directory_prefix=prefix)
 region_ensemble_net.compile(optimizer=Adam(), loss=re.soft_loss)
 region_ensemble_net.set_pca_bottleneck_weights(region_ensemble_net_pca)
 
-regen_output_tensor = region_ensemble_net.output  # todo: in which order are the elements/joints? probably like in paper, but verify this
+regen_output_tensor = region_ensemble_net.output
 
 # here the Region Ensemble network is done initialising
 
-# store PNG image of region_ensemble_net
-# plot_model(region_ensemble_net, to_file='%s/region_ensemble_net.png' % region_ensemble_net.directory_prefix, show_shapes=True)
 
 # initialize Graph LSTM
 
@@ -75,8 +74,14 @@ regen_output_tensor = region_ensemble_net.output  # todo: in which order are the
 # the graph must be created manually
 nxgraph = glstm.GraphLSTMNet.create_nxgraph(HAND_GRAPH_HANDS2017, num_units=3,
                                             index_dict=HAND_GRAPH_HANDS2017_INDEX_DICT)
-
 graph_lstm_net = glstm.GraphLSTMNet(nxgraph, shared_weights=glstm.NEIGHBOUR_CONNECTIONS_SHARED)
+
+glstm_output_tensor = tf.nn.dynamic_rnn(graph_lstm_net, inputs=regen_output_tensor)
+
+# here the Graph LSTM network is done initializing
+
+
+# todo: how to load dataset the tensorflow way (as opposed to keras)?
 
 # todo continue here
 
