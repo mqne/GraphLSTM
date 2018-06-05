@@ -228,22 +228,28 @@ def pair_batch_generator(dataset_root, container_name_list, batch_size, shuffle=
                                        progress_desc=progress_desc, leave=leave, epoch=i_epoch)
 
 
-def image_batch_generator(dataset_root, container_name_list, batch_size):
+def image_batch_generator(dataset_root, container_name_list, batch_size, progress_desc=None, leave=False):
     while True:
-        image_generator = sample_generator(dataset_root, "image", container_name_list)
-        # batch loop
-        while True:
-            # pickup
-            image_islice = itertools.islice(image_generator, batch_size)
-            # generate
-            image_list = list(image_islice)
+        image_batch_generator_one_epoch(dataset_root=dataset_root, container_name_list=container_name_list,
+                                        batch_size=batch_size, progress_desc=progress_desc, leave=leave)
 
-            if len(image_list) == 0:
-                # end of epoch
-                break
 
-            image_list = [resize_image(image, Const.MODEL_IMAGE_SHAPE) for image in image_list]
-            yield np.asarray(image_list)
+def image_batch_generator_one_epoch(dataset_root, container_name_list, batch_size, progress_desc=None, leave=False):
+    image_generator = sample_generator(dataset_root, "image", container_name_list,
+                                       progress_desc=progress_desc, leave=leave)
+    # batch loop
+    while True:
+        # pickup
+        image_islice = itertools.islice(image_generator, batch_size)
+        # generate
+        image_list = list(image_islice)
+
+        if len(image_list) == 0:
+            # end of epoch
+            break
+
+        image_list = [resize_image(image, Const.MODEL_IMAGE_SHAPE) for image in image_list]
+        yield np.asarray(image_list)
 
 
 # # PCA

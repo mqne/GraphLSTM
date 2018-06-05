@@ -1,6 +1,6 @@
 import graph_lstm as glstm
 import region_ensemble.model as re
-import helpers
+from helpers import *
 
 import tensorflow as tf
 import keras.backend as K
@@ -32,27 +32,13 @@ validate_list = []
 testset_root = r"/data2/datasets/hands2017/data/hand2017_test_0914"
 test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.pkl"]
 
+# number of timesteps to be simulated (each step, the same data is fed)
+graphlstm_timesteps = 2
 
-# 21 joint hand graph as used in hands2017 dataset
-HAND_GRAPH_HANDS2017 = [("TMCP", "Wrist"), ("IMCP", "Wrist"), ("MMCP", "Wrist"), ("RMCP", "Wrist"), ("PMCP", "Wrist"),
-                        ("IMCP", "MMCP"), ("MMCP", "RMCP"), ("RMCP", "PMCP"),
-                        ("TMCP", "TPIP"), ("TPIP", "TDIP"), ("TDIP", "TTIP"),
-                        ("IMCP", "IPIP"), ("IPIP", "IDIP"), ("IDIP", "ITIP"),
-                        ("MMCP", "MPIP"), ("MPIP", "MDIP"), ("MDIP", "MTIP"),
-                        ("RMCP", "RPIP"), ("RPIP", "RDIP"), ("RDIP", "RTIP"),
-                        ("PMCP", "PPIP"), ("PPIP", "PDIP"), ("PDIP", "PTIP")]
-
-# joint order as used in hands2017 dataset
-HAND_GRAPH_HANDS2017_INDEX_DICT = {"Wrist": 0,
-                                   "TMCP": 1, "IMCP": 2, "MMCP": 3, "RMCP": 4, "PMCP": 5,
-                                   "TPIP": 6, "TDIP": 7, "TTIP": 8,
-                                   "IPIP": 9, "IDIP": 10, "ITIP": 11,
-                                   "MPIP": 12, "MDIP": 13, "MTIP": 14,
-                                   "RPIP": 15, "RDIP": 16, "RTIP": 17,
-                                   "PPIP": 18, "PDIP": 19, "PTIP": 20}
+model_name = "regen41_graphlstm1t%i" % graphlstm_timesteps
 
 
-# # BUILD MODEL
+# # PREPARE SESSION
 
 # set Keras session
 config = tf.ConfigProto(log_device_placement=True, allow_soft_placement=True)
@@ -60,6 +46,10 @@ config.gpu_options.allow_growth = True
 sess = tf.Session(config=config)
 K.set_session(sess)
 
+
+# # BUILD MODEL
+
+print("\n###   Building Model: %s   ###\n" % model_name)
 
 print("Building RegionEnsemble network …")
 
@@ -84,9 +74,6 @@ nxgraph = glstm.GraphLSTMNet.create_nxgraph(HAND_GRAPH_HANDS2017, num_units=3,
                                             index_dict=HAND_GRAPH_HANDS2017_INDEX_DICT)
 graph_lstm_net = glstm.GraphLSTMNet(nxgraph, shared_weights=glstm.NEIGHBOUR_CONNECTIONS_SHARED)
 
-# number of timesteps to be simulated (each step, the same data is fed)
-graphlstm_timesteps = 2
-
 # input dimensions of GraphLSTMNet: batch_size, max_time, number_of_nodes, input_size
 regen_output_tensor_plus_timedim = graph_lstm_net.reshape_input_for_dynamic_rnn(regen_output_tensor,
                                                                                 timesteps=graphlstm_timesteps)
@@ -103,11 +90,10 @@ glstm_output = tf.unstack(glstm_output_full, axis=1)[-1]
 
 print("Finished building model.\n")
 
+
 # # TRAIN
 
 print("Preparing training …")
-
-model_name = "regen41_graphlstm1t%i" % graphlstm_timesteps
 
 max_epoch = 10
 start_epoch = 1
@@ -128,21 +114,32 @@ if not os.path.exists(checkpoint_dir):
     print("Created new checkpoint directory `%s`." % checkpoint_dir)
 
 saver = tf.train.Saver(keep_checkpoint_every_n_hours=1, filename=checkpoint_dir)
-t = helpers.TQDMHelper()
+
+# gather tensors needed for resuming after loading
+tf.add_to_collection(COLLECTION, input_tensor)
+tf.add_to_collection(COLLECTION, output_tensor)
+tf.add_to_collection(COLLECTION, groundtruth_tensor)
+tf.add_to_collection(COLLECTION, train_step)
+tf.add_to_collection(COLLECTION, loss)
+
+t = TQDMHelper()
 
 print("Initializing variables …")
 
 sess.run(tf.global_variables_initializer())
 
-print("Starting training.")
-
 with sess.as_default():
+    print("Saving model meta graph …")
+    saver.export_meta_graph(filename=checkpoint_dir + "/%s.meta" % model_name)
+
+    print("Starting training.")
+
     for epoch in range(start_epoch, max_epoch + 1):
         t.start()
         training_sample_generator = re.pair_batch_generator_one_epoch(dataset_root, train_list,
                                                                       re.Const.TRAIN_BATCH_SIZE,
                                                                       shuffle=True, progress_desc="Epoch %i" % epoch,
-                                                                      leave=False, epoch=epoch - 1)
+                                                                      leave=False, epoch=epoch - 1)  # todo augmented=True?
 
         for batch in training_sample_generator:
             X, Y = batch
@@ -150,7 +147,9 @@ with sess.as_default():
             X = X.reshape([actual_batch_size, *input_shape[1:]])
             Y = Y.reshape([actual_batch_size, *output_shape[1:]])
 
-            _, loss_value = sess.run([train_step, loss], feed_dict={input_tensor: X, groundtruth_tensor: Y, K.learning_phase(): 1})
+            _, loss_value = sess.run([train_step, loss], feed_dict={input_tensor: X,
+                                                                    groundtruth_tensor: Y,
+                                                                    K.learning_phase(): 1})
 
             t.write("Current loss: %f" % loss_value)
 
@@ -165,24 +164,19 @@ exit(0)
 train_batch_gen = re.pair_batch_generator(dataset_root, train_list, re.Const.TRAIN_BATCH_SIZE, shuffle=True, augmented=True)
 validate_batch_gen = re.pair_batch_generator(dataset_root, validate_list, re.Const.VALIDATE_BATCH_SIZE)
 
-history = region_ensemble_net.fit_generator(
-    train_batch_gen,
-    steps_per_epoch=re.Const.NUM_TRAIN_BATCHES,
-    epochs=200,
-    initial_epoch=30,
-    callbacks=[
-        #         LearningRateScheduler(lr_schedule),
-        TensorBoard(log_dir="./%s" % region_ensemble_net.directory_prefix),
-        ModelCheckpoint(
-            filepath='./%s/region_ensemble_net.{epoch:02d}.hdf5' % region_ensemble_net.directory_prefix,
-        ),
-    ]
-)
-
-
-# # Load Weights
-
-region_ensemble_net.load_weights('./%s/region_ensemble_net.30.hdf5' % prefix)  # , custom_objects={'soft_loss': soft_loss})
+# history = region_ensemble_net.fit_generator(
+#     train_batch_gen,
+#     steps_per_epoch=re.Const.NUM_TRAIN_BATCHES,
+#     epochs=200,
+#     initial_epoch=30,
+#     callbacks=[
+#         #         LearningRateScheduler(lr_schedule),
+#         TensorBoard(log_dir="./%s" % region_ensemble_net.directory_prefix),
+#         ModelCheckpoint(
+#             filepath='./%s/region_ensemble_net.{epoch:02d}.hdf5' % region_ensemble_net.directory_prefix,
+#         ),
+#     ]
+# )
 
 
 # # Validate
