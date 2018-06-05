@@ -48,13 +48,14 @@ import scipy.misc
 import math
 import random
 import pandas as pd
-from os import path
+from os import path, makedirs
 import itertools
 from sklearn.decomposition import PCA as SKLEARN_PCA
 import numpy as np
 import scipy as sp
 
 from tqdm import tqdm
+from sys import stdout
 
 
 # In[4]:
@@ -257,7 +258,10 @@ class RegEnPCA:
     def get_mean_and_eigenvectors(train_labels):
         OUTPUT_DIM = Const.LABEL_SHAPE
         pca = SKLEARN_PCA(n_components=OUTPUT_DIM)
+        print("Fitting PCA …", end=" ")
+        stdout.flush()
         pca.fit(train_labels)
+        print("done.")
         pca_mean = pca.mean_
         # Get eigenvectors as vertical vectors
         pca_eigenvalues, pca_eigenvectors_original = np.linalg.eig(pca.get_covariance())
@@ -301,6 +305,9 @@ class RegEnPCA:
             self._fromfile()
 
     def _tofile(self):
+        if not path.exists(self._directory_prefix):
+            makedirs(self._directory_prefix)
+            print("Created new directory `%s` to store PCA data." % self._directory_prefix)
         self._pca_mean.tofile("%s/pca_mean.npy" % self._directory_prefix)
         self._pca_eigenvectors.tofile("%s/pca_eigenvectors.npy" % self._directory_prefix)
         self._pca_eigenvalues.tofile("%s/pca_eigenvalues.npy" % self._directory_prefix)

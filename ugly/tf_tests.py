@@ -157,6 +157,58 @@ def test_train():
     for n in nxgraph:
         print(n, nxgraph.nodes[n][glstm._INDEX])
 
+    from tqdm import tqdm
+    from tqdm._utils import _term_move_up
+    from time import sleep
+    sleep(1)
+    prefix = _term_move_up() + '\r'
+    def tqdm_generator():
+        for i in tqdm(range(50), leave=False):
+            yield i
+    t = TQDMHelper()
+    t.start()
+    for x in range(2):
+        g = tqdm_generator()
+        for i in g:
+            t.write("I am %i" % i)
+            sleep(.05)
+    t.stop()
+
+    print("Done.")
+    sleep(2)
+
+from tqdm import tqdm
+from sys import stdout
+
+
+class TQDMHelper:
+    def __init__(self):
+        from tqdm._utils import _term_move_up, _environ_cols_wrapper
+        self._r_prefix = _term_move_up() + '\r'
+        self._dynamic_ncols = _environ_cols_wrapper()
+
+    def _write_raw(self, message):
+        tqdm.write(self._r_prefix + message)
+
+    def _clear(self):
+        if self._dynamic_ncols:
+            ncols = self._dynamic_ncols(stdout)
+        else:
+            ncols = 20
+        self._write_raw(" " * ncols)
+
+    @staticmethod
+    def start():
+        print()
+
+    def write(self, message):
+        self._clear()
+        self._write_raw(message)
+
+    def stop(self):
+        self._clear()
+
+
 # class LSM(unittest.TestCase):
 #     def setUp(self):
 #         self.longMessage = True

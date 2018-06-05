@@ -1,5 +1,6 @@
 import graph_lstm as glstm
 import region_ensemble.model as re
+import helpers
 
 import tensorflow as tf
 import keras.backend as K
@@ -11,6 +12,7 @@ import numpy as np
 import seaborn as sns
 import zipfile
 
+from tqdm import tqdm
 import os
 
 
@@ -20,14 +22,14 @@ import os
 
 # dataset path declarations
 
-prefix = "train-01"
+prefix = "train-02"
 checkpoint_dir = r"/data2/GraphLSTM/%s" % prefix
 
-dataset_root = r"/mnt/nasbi/shared/research/hand-pose-estimation/hands2017/data/hand2017_nor_img_new"
+dataset_root = r"/data2/datasets/hands2017/data/hand2017_nor_img_new"
 train_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)] + ["nor_00957032.pkl"]
 validate_list = []
 
-testset_root = r"/mnt/nasbi/shared/research/hand-pose-estimation/hands2017/data/hand2017_test_0914"
+testset_root = r"/data2/datasets/hands2017/data/hand2017_test_0914"
 test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.pkl"]
 
 
@@ -82,11 +84,21 @@ nxgraph = glstm.GraphLSTMNet.create_nxgraph(HAND_GRAPH_HANDS2017, num_units=3,
                                             index_dict=HAND_GRAPH_HANDS2017_INDEX_DICT)
 graph_lstm_net = glstm.GraphLSTMNet(nxgraph, shared_weights=glstm.NEIGHBOUR_CONNECTIONS_SHARED)
 
-# input dimensions of GraphLSTMNet: batch_size, max_time, number_of_nodes, input_size
-regen_output_tensor_plus_timedim = tf.reshape(regen_output_tensor, shape=[-1, 1, 21, 3])  # todo replace numbers by references, move to graph_lstm_net.reshape_input
+# number of timesteps to be simulated (each step, the same data is fed)
+graphlstm_timesteps = 2
 
-glstm_output_and_state = tf.nn.dynamic_rnn(graph_lstm_net, inputs=regen_output_tensor_plus_timedim, dtype=tf.float32)  # todo batch size
-glstm_output = glstm_output_and_state[0]
+# input dimensions of GraphLSTMNet: batch_size, max_time, number_of_nodes, input_size
+regen_output_tensor_plus_timedim = graph_lstm_net.reshape_input_for_dynamic_rnn(regen_output_tensor,
+                                                                                timesteps=graphlstm_timesteps)
+
+dynrnn_glstm_output_full, dynrnn_glstm_state = tf.nn.dynamic_rnn(graph_lstm_net,
+                                                                 inputs=regen_output_tensor_plus_timedim,
+                                                                 dtype=tf.float32)
+
+# reorder dimensions to [batch_size, max_time, number_of_nodes, output_size]
+glstm_output_full = graph_lstm_net.transpose_output_from_cells_first_to_batch_first(dynrnn_glstm_output_full)
+# extract last timestep from output
+glstm_output = tf.unstack(glstm_output_full, axis=1)[-1]
 # here the Graph LSTM network is done initializing
 
 print("Finished building model.\n")
@@ -95,7 +107,7 @@ print("Finished building model.\n")
 
 print("Preparing training …")
 
-model_name = "regen41_graphlstm1"
+model_name = "regen41_graphlstm1t%i" % graphlstm_timesteps
 
 max_epoch = 10
 start_epoch = 1
@@ -108,13 +120,15 @@ output_tensor = glstm_output
 
 groundtruth_tensor = tf.placeholder(tf.float32, shape=output_shape)
 
-train_step = tf.train.AdamOptimizer().minimize(re.soft_loss(groundtruth_tensor, output_tensor))
+loss = re.soft_loss(groundtruth_tensor, output_tensor)
+train_step = tf.train.AdamOptimizer().minimize(loss)
 
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
-    print("Created new directory `%s`." % checkpoint_dir)
+    print("Created new checkpoint directory `%s`." % checkpoint_dir)
 
 saver = tf.train.Saver(keep_checkpoint_every_n_hours=1, filename=checkpoint_dir)
+t = helpers.TQDMHelper()
 
 print("Initializing variables …")
 
@@ -124,19 +138,25 @@ print("Starting training.")
 
 with sess.as_default():
     for epoch in range(start_epoch, max_epoch + 1):
+        t.start()
         training_sample_generator = re.pair_batch_generator_one_epoch(dataset_root, train_list,
                                                                       re.Const.TRAIN_BATCH_SIZE,
                                                                       shuffle=True, progress_desc="Epoch %i" % epoch,
-                                                                      leave=True, epoch=epoch - 1)
+                                                                      leave=False, epoch=epoch - 1)
+
         for batch in training_sample_generator:
             X, Y = batch
             actual_batch_size = X.shape[0]
             X = X.reshape([actual_batch_size, *input_shape[1:]])
             Y = Y.reshape([actual_batch_size, *output_shape[1:]])
 
-            sess.run(train_step, feed_dict={input_tensor: X, groundtruth_tensor: Y, K.learning_phase(): 1})
+            _, loss_value = sess.run([train_step, loss], feed_dict={input_tensor: X, groundtruth_tensor: Y, K.learning_phase(): 1})
+
+            t.write("Current loss: %f" % loss_value)
 
             # todo: pass K.learning_phase(): 1 to feed_dict (for testing: 0)
+        t.stop()
+        print("Training loss after epoch %i: %f" % (epoch, loss_value))
         saver.save(sess, save_path=checkpoint_dir + "/%s" % model_name, global_step=epoch)
 
 print("Training done, exiting.")

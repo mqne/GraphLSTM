@@ -562,12 +562,32 @@ class GraphLSTMNet(RNNCell):
         else:
             return True
 
-    def reshape_input(self, input_tensor):
-        # specifically for region ensemble? or generally, to add time dimension with flexible "depth"?
-        raise NotImplementedError
+    def reshape_input_for_dynamic_rnn(self, input_tensor, timesteps=None):
+        """Reshape a time-dimension free Tensor to input shape required
+        by GraphLSTMNet, optionally adding time dimension.
+
+        The `input_tensor` will be reshaped to [batch_size, number_of_nodes, input_size], which is the expected
+        input shape of the GraphLSTM.
+
+        If `timesteps` is specified, a time dimension of that length is added for a resulting shape of
+        [batch_size, timesteps, number_of_nodes, input_size] with the input being identical for each timestep.
+        This is useful for preparing a tensor without time dimension to be fed into
+        tf.dynamic_rnn(GraphLSTMNet, inputs=reshaped_tensor)
+
+        Args:
+          input_tensor: The tensor to be reshaped.
+          timesteps (int): (optional) The number of timesteps to be included in the tensor. Default: None.
+
+        Returns:
+          The reshaped input tensor [batch_size,[ timesteps,] number_of_nodes, input_size].
+        """
+        shaped_tensor = array_ops.reshape(input_tensor, shape=[-1, len(self.output_size), self.output_size[0]])
+        if timesteps is not None:
+            return array_ops.stack([shaped_tensor] * timesteps, axis=1)
+        return shaped_tensor
 
     @staticmethod
-    def transpose_output_from_cells_first_to_batch_first(output, time_major=False):  # todo this might be obsolete
+    def transpose_output_from_cells_first_to_batch_first(output, time_major=False):
         """Transpose a GraphLSTMNet output to the tf.nn.dynamic_rnn input format.
 
         GraphLSTMNet accepts input in the shape [batch_size, number_of_nodes, inputs_size],
@@ -576,7 +596,7 @@ class GraphLSTMNet(RNNCell):
         introduced by tf.nn.dynamic_rnn.
 
         Args:
-          output: A tensor of dimension [number_of_nodes, batch_size, output_size] or
+          output: A tensor of dimension
             [number_of_nodes, batch_size, max_time, output_size] if time_major=False or
             [number_of_nodes, max_time, batch_size, output_size] if time_major=True.
           time_major (bool): As used in tf.nn.dynamic_rnn. Default: False.
