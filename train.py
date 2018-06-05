@@ -11,6 +11,8 @@ import numpy as np
 import seaborn as sns
 import zipfile
 
+import os
+
 
 # set plot style
 # sns.set_style("whitegrid")
@@ -19,6 +21,7 @@ import zipfile
 # dataset path declarations
 
 prefix = "train-01"
+checkpoint_dir = r"/data2/GraphLSTM/%s" % prefix
 
 dataset_root = r"/mnt/nasbi/shared/research/hand-pose-estimation/hands2017/data/hand2017_nor_img_new"
 train_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)] + ["nor_00957032.pkl"]
@@ -47,45 +50,97 @@ HAND_GRAPH_HANDS2017_INDEX_DICT = {"Wrist": 0,
                                    "PPIP": 18, "PDIP": 19, "PTIP": 20}
 
 
-# # Model
+# # BUILD MODEL
 
 # set Keras session
 config = tf.ConfigProto(log_device_placement=True, allow_soft_placement=True)
 config.gpu_options.allow_growth = True
-K.set_session(tf.Session(config=config))
+sess = tf.Session(config=config)
+K.set_session(sess)
 
+
+print("Building RegionEnsemble network …")
 
 # initialize region_ensemble_net
-
-region_ensemble_net_pca = re.RegEnPCA(directory_prefix=prefix, use_precalculated_samples=False,
+region_ensemble_net_pca = re.RegEnPCA(directory_prefix=prefix, use_precalculated_samples=True,
                                       dataset_root=dataset_root, train_list=train_list)
 region_ensemble_net = re.RegEnModel(directory_prefix=prefix)
 region_ensemble_net.compile(optimizer=Adam(), loss=re.soft_loss)
 region_ensemble_net.set_pca_bottleneck_weights(region_ensemble_net_pca)
 
+regen_input_tensor = region_ensemble_net.input
 regen_output_tensor = region_ensemble_net.output
-
 # here the Region Ensemble network is done initialising
 
 
-# initialize Graph LSTM
+print("Building GraphLSTM network …")
 
+# initialize Graph LSTM
 # since a well-defined node order is necessary to correctly communicate with the Region Ensemble network,
 # the graph must be created manually
 nxgraph = glstm.GraphLSTMNet.create_nxgraph(HAND_GRAPH_HANDS2017, num_units=3,
                                             index_dict=HAND_GRAPH_HANDS2017_INDEX_DICT)
 graph_lstm_net = glstm.GraphLSTMNet(nxgraph, shared_weights=glstm.NEIGHBOUR_CONNECTIONS_SHARED)
 
-glstm_output_tensor = tf.nn.dynamic_rnn(graph_lstm_net, inputs=regen_output_tensor)
+# input dimensions of GraphLSTMNet: batch_size, max_time, number_of_nodes, input_size
+regen_output_tensor_plus_timedim = tf.reshape(regen_output_tensor, shape=[-1, 1, 21, 3])  # todo replace numbers by references, move to graph_lstm_net.reshape_input
 
+glstm_output_and_state = tf.nn.dynamic_rnn(graph_lstm_net, inputs=regen_output_tensor_plus_timedim, dtype=tf.float32)  # todo batch size
+glstm_output = glstm_output_and_state[0]
 # here the Graph LSTM network is done initializing
 
+print("Finished building model.\n")
 
-# todo: how to load dataset the tensorflow way (as opposed to keras)?
+# # TRAIN
 
-# todo continue here
+print("Preparing training …")
 
-# # Train
+model_name = "regen41_graphlstm1"
+
+max_epoch = 10
+start_epoch = 1
+
+input_shape = region_ensemble_net.input_shape  # = [None, *re.Const.MODEL_IMAGE_SHAPE]
+input_tensor = regen_input_tensor
+
+output_shape = [None, len(graph_lstm_net.output_size), graph_lstm_net.output_size[0]]
+output_tensor = glstm_output
+
+groundtruth_tensor = tf.placeholder(tf.float32, shape=output_shape)
+
+train_step = tf.train.AdamOptimizer().minimize(re.soft_loss(groundtruth_tensor, output_tensor))
+
+if not os.path.exists(checkpoint_dir):
+    os.makedirs(checkpoint_dir)
+    print("Created new directory `%s`." % checkpoint_dir)
+
+saver = tf.train.Saver(keep_checkpoint_every_n_hours=1, filename=checkpoint_dir)
+
+print("Initializing variables …")
+
+sess.run(tf.global_variables_initializer())
+
+print("Starting training.")
+
+with sess.as_default():
+    for epoch in range(start_epoch, max_epoch + 1):
+        training_sample_generator = re.pair_batch_generator_one_epoch(dataset_root, train_list,
+                                                                      re.Const.TRAIN_BATCH_SIZE,
+                                                                      shuffle=True, progress_desc="Epoch %i" % epoch,
+                                                                      leave=True, epoch=epoch - 1)
+        for batch in training_sample_generator:
+            X, Y = batch
+            actual_batch_size = X.shape[0]
+            X = X.reshape([actual_batch_size, *input_shape[1:]])
+            Y = Y.reshape([actual_batch_size, *output_shape[1:]])
+
+            sess.run(train_step, feed_dict={input_tensor: X, groundtruth_tensor: Y, K.learning_phase(): 1})
+
+            # todo: pass K.learning_phase(): 1 to feed_dict (for testing: 0)
+        saver.save(sess, save_path=checkpoint_dir + "/%s" % model_name, global_step=epoch)
+
+print("Training done, exiting.")
+exit(0)
 
 train_batch_gen = re.pair_batch_generator(dataset_root, train_list, re.Const.TRAIN_BATCH_SIZE, shuffle=True, augmented=True)
 validate_batch_gen = re.pair_batch_generator(dataset_root, validate_list, re.Const.VALIDATE_BATCH_SIZE)

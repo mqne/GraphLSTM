@@ -562,6 +562,10 @@ class GraphLSTMNet(RNNCell):
         else:
             return True
 
+    def reshape_input(self, input_tensor):
+        # specifically for region ensemble? or generally, to add time dimension with flexible "depth"?
+        raise NotImplementedError
+
     @staticmethod
     def transpose_output_from_cells_first_to_batch_first(output, time_major=False):  # todo this might be obsolete
         """Transpose a GraphLSTMNet output to the tf.nn.dynamic_rnn input format.

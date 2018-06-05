@@ -107,7 +107,8 @@ def resize_image(image, to_shape):
     return image
 
 
-def sample_generator(dataset_root, container_dir, container_name_list, resize_to_shape=None, show_progress=False):
+def sample_generator(dataset_root, container_dir, container_name_list, resize_to_shape=None, progress_desc=None,
+                     leave=False):
     SHAPE_DICT = {
         'image': Const.SRC_IMAGE_SHAPE,
         'pose': Const.LABEL_SHAPE,
@@ -121,8 +122,8 @@ def sample_generator(dataset_root, container_dir, container_name_list, resize_to
     container_list = map(lambda container_name: path.join(dataset_root, container_dir, container_name),
                          container_name_list)
     it = enumerate(container_list)
-    if show_progress:
-        it = tqdm(it, total=len(container_name_list), desc='Generating samples')
+    if progress_desc is not None:
+        it = tqdm(it, total=len(container_name_list), desc=progress_desc, leave=leave)
     for i, container in it:
         #         p.update(i)  # DEBUG: ProgressBar
         sample_seq = pd.read_pickle(container, compression='gzip')
@@ -190,31 +191,40 @@ def unzip_pair(zipped):
     return next(seq_gen), next(seq_gen)
 
 
-def pair_batch_generator(dataset_root, container_name_list, batch_size, shuffle=False, augmented=False):
+def pair_batch_generator_one_epoch(dataset_root, container_name_list, batch_size, shuffle=False, augmented=False,
+                                   progress_desc=None, leave=False, epoch=-1):
+    if shuffle:
+        container_name_list = np.random.permutation(container_name_list)
+    image_generator = sample_generator(dataset_root, "image", container_name_list,
+                                       progress_desc=progress_desc, leave=leave)
+    label_generator = sample_generator(dataset_root, "pose", container_name_list)
+    # batch loop
+    while True:
+        # pickup
+        image_islice = itertools.islice(image_generator, batch_size)
+        label_islice = itertools.islice(label_generator, batch_size)
+        # generate
+        image_list = list(image_islice)
+        label_list = list(label_islice)
+        if len(image_list) == 0:
+            # end of epoch
+            break
+
+        # process
+        if augmented and epoch != 0:
+            image_list, label_list = unzip_pair(map(alter_pair, image_list, label_list))
+        image_list = [resize_image(image, Const.MODEL_IMAGE_SHAPE) for image in image_list]
+
+        yield np.asarray(image_list), np.asarray(label_list)
+
+
+def pair_batch_generator(dataset_root, container_name_list, batch_size, shuffle=False, augmented=False,
+                         progress_desc=None, leave=False):
     # epoch loop
     for i_epoch in range(65535):
-        if shuffle:
-            container_name_list = np.random.permutation(container_name_list)
-        image_generator = sample_generator(dataset_root, "image", container_name_list)
-        label_generator = sample_generator(dataset_root, "pose", container_name_list)
-        # batch loop
-        while True:
-            # pickup
-            image_islice = itertools.islice(image_generator, batch_size)
-            label_islice = itertools.islice(label_generator, batch_size)
-            # generate
-            image_list = list(image_islice)
-            label_list = list(label_islice)
-            if len(image_list) == 0:
-                # end of epoch
-                break
-
-            # process
-            if augmented and i_epoch != 0:
-                image_list, label_list = unzip_pair(map(alter_pair, image_list, label_list))
-            image_list = [resize_image(image, Const.MODEL_IMAGE_SHAPE) for image in image_list]
-
-            yield np.asarray(image_list), np.asarray(label_list)
+        pair_batch_generator_one_epoch(dataset_root=dataset_root, container_name_list=container_name_list,
+                                       batch_size=batch_size, shuffle=shuffle, augmented=augmented,
+                                       progress_desc=progress_desc, leave=leave, epoch=i_epoch)
 
 
 def image_batch_generator(dataset_root, container_name_list, batch_size):
@@ -283,7 +293,7 @@ class RegEnPCA:
                 raise ValueError("Must define `dataset_root` directory when reading samples for PCA calculation")
             if train_list is None:
                 raise ValueError("Must define train_list namespace when reading samples for PCA calculation")
-            train_label_gen = sample_generator(dataset_root, "pose", train_list, show_progress=True)
+            train_label_gen = sample_generator(dataset_root, "pose", train_list, progress_desc="Generating PCA samples")
             self._pca_mean, self._pca_eigenvectors, self._pca_eigenvalues = \
                 self.get_mean_eigenvectors_eigenvalues_with_augment(train_label_gen, augment_times=2)
             self._tofile()
@@ -343,7 +353,7 @@ class RegEnModel(Model):
         from keras import regularizers
 
         with tf.device(Const.DEVICE):
-            image = Input(shape=Const.MODEL_IMAGE_SHAPE)
+            image = Input(shape=Const.MODEL_IMAGE_SHAPE, name="regen_net_input")
 
             com = Convolution2D(filters=32,
                                 kernel_size=(5, 5),

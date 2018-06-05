@@ -60,7 +60,7 @@ test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.p
 # set Keras session
 config = tf.ConfigProto(log_device_placement=True, allow_soft_placement=True)
 config.gpu_options.allow_growth = True
-set_session(tf.Session(config=config))
+set_session(tf.InteractiveSession(config=config))
 
 # instantiate model
 
@@ -81,22 +81,27 @@ plot_model(model, to_file='%s/model.png' % model.directory_prefix, show_shapes=T
 train_batch_gen = re.pair_batch_generator(dataset_root, train_list, re.Const.TRAIN_BATCH_SIZE, shuffle=True, augmented=True)
 validate_batch_gen = re.pair_batch_generator(dataset_root, validate_list, re.Const.VALIDATE_BATCH_SIZE)
 
-# # Load Weights
-# model.load_weights('./%s/model.30.hdf5' % model.directory_prefix)  # , custom_objects={'soft_loss': soft_loss})
-#
-# history = model.fit_generator(
-#     train_batch_gen,
-#     steps_per_epoch=re.Const.NUM_TRAIN_BATCHES,
-#     epochs=200,
-#     initial_epoch=30,
-#     callbacks=[
-#         #         LearningRateScheduler(lr_schedule),
-#         TensorBoard(log_dir="./%s" % model.directory_prefix),
-#         ModelCheckpoint(
-#             filepath='./%s/model.{epoch:02d}.hdf5' % model.directory_prefix,
-#         ),
-#     ]
-# )
+# Load Weights
+model.load_weights('./%s/model.30.hdf5' % model.directory_prefix)  # , custom_objects={'soft_loss': soft_loss})
+
+print("Input shape:")
+print(model.input_shape)
+print("Output shape:")
+print(model.output_shape)
+
+history = model.fit_generator(
+    train_batch_gen,
+    steps_per_epoch=re.Const.NUM_TRAIN_BATCHES,
+    epochs=200,
+    initial_epoch=30,
+    callbacks=[
+        #         LearningRateScheduler(lr_schedule),
+        TensorBoard(log_dir="./%s" % model.directory_prefix),
+        ModelCheckpoint(
+            filepath='./%s/model.{epoch:02d}.hdf5' % model.directory_prefix,
+        ),
+    ]
+)
 
 
 # # Load Weights
