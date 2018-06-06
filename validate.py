@@ -26,8 +26,9 @@ prefix = "train-02"
 checkpoint_dir = r"/data2/GraphLSTM/%s" % prefix
 
 dataset_root = r"/data2/datasets/hands2017/data/hand2017_nor_img_new"
-train_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)] + ["nor_00957032.pkl"]
-validate_list = []
+train_and_validate_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)] + ["nor_00957032.pkl"]
+
+train_list, validate_list = train_validate_split(train_and_validate_list)
 
 testset_root = r"/data2/datasets/hands2017/data/hand2017_test_0914"
 test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.pkl"]
@@ -50,7 +51,7 @@ K.set_session(sess)
 
 print("\n###   Loading Model: %s   ###\n" % model_name)
 
-epoch = 2
+epoch = 16
 
 input_shape = [None, *re.Const.MODEL_IMAGE_SHAPE]
 output_shape = [None, len(HAND_GRAPH_HANDS2017_INDEX_DICT), GLSTM_NUM_UNITS]
@@ -72,7 +73,6 @@ with sess.as_default():
     print("Initializing variables …")
     sess.run(tf.global_variables_initializer())
 
-    validate_list = [train_list[i] for i in range(0, len(train_list), 1000)]  # todo BAD CODE replace this
     validate_image_batch_gen = re.image_batch_generator_one_epoch(dataset_root,
                                                                   validate_list,
                                                                   re.Const.VALIDATE_BATCH_SIZE,

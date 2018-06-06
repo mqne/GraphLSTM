@@ -26,8 +26,9 @@ prefix = "train-02"
 checkpoint_dir = r"/data2/GraphLSTM/%s" % prefix
 
 dataset_root = r"/data2/datasets/hands2017/data/hand2017_nor_img_new"
-train_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)] + ["nor_00957032.pkl"]
-validate_list = []
+train_and_validate_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)] + ["nor_00957032.pkl"]
+
+train_list, validate_list = train_validate_split(train_and_validate_list)
 
 testset_root = r"/data2/datasets/hands2017/data/hand2017_test_0914"
 test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.pkl"]

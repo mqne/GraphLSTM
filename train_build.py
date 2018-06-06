@@ -26,16 +26,18 @@ prefix = "train-02"
 checkpoint_dir = r"/data2/GraphLSTM/%s" % prefix
 
 dataset_root = r"/data2/datasets/hands2017/data/hand2017_nor_img_new"
-train_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)] + ["nor_00957032.pkl"]
-validate_list = []
+train_and_validate_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)] + ["nor_00957032.pkl"]
+
+train_list, validate_list = train_validate_split(train_and_validate_list)
 
 testset_root = r"/data2/datasets/hands2017/data/hand2017_test_0914"
 test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.pkl"]
 
 # number of timesteps to be simulated (each step, the same data is fed)
 graphlstm_timesteps = 2
+learning_rate = 1e-7
 
-model_name = "regen41_graphlstm1t%i" % graphlstm_timesteps
+model_name = "regen41_graphlstm1t%i_adamlr%f" % (graphlstm_timesteps, learning_rate)
 
 
 # # PREPARE SESSION
@@ -95,7 +97,7 @@ print("Finished building model.\n")
 
 print("Preparing training …")
 
-max_epoch = 10
+max_epoch = 100
 start_epoch = 1
 
 input_shape = region_ensemble_net.input_shape  # = [None, *re.Const.MODEL_IMAGE_SHAPE]
@@ -107,7 +109,7 @@ output_tensor = glstm_output
 groundtruth_tensor = tf.placeholder(tf.float32, shape=output_shape)
 
 loss = re.soft_loss(groundtruth_tensor, output_tensor)
-train_step = tf.train.AdamOptimizer().minimize(loss)
+train_step = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss)
 
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)

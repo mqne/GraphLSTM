@@ -27,6 +27,11 @@ HAND_GRAPH_HANDS2017_INDEX_DICT = {"Wrist": 0,
                                    "PPIP": 18, "PDIP": 19, "PTIP": 20}
 
 
+def train_validate_split(train_validate_list, split=0.8):
+    cut = int(len(train_validate_list) * split)
+    return train_validate_list[:cut], train_validate_list[cut:]
+
+
 class TQDMHelper:
     """For printing additional info while a tqdm bar is active.
 
