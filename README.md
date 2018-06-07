@@ -35,6 +35,7 @@ For running the *Region Ensemble network*, these packages are additionally requi
 - `scikit-learn`
 - `tqdm`
 - `pydot`
+- `pillow`
 
 #### Installing via Anaconda
 For creating a new [Anaconda](https://www.anaconda.com/download/) environment *graphlstm* with all necessary and recommended packages installed, do the following:

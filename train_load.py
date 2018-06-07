@@ -35,8 +35,11 @@ test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.p
 
 # number of timesteps to be simulated (each step, the same data is fed)
 graphlstm_timesteps = 2
+learning_rate = 1e-3
 
-model_name = "regen41_graphlstm1t%i" % graphlstm_timesteps
+model_name = "regen41_graphlstm1t%i_outputscaling21x3wb_adamlr%f" % (graphlstm_timesteps, learning_rate)
+
+checkpoint_dir += r"/%s" % model_name
 
 
 # # PREPARE SESSION

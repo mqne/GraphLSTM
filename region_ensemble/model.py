@@ -283,7 +283,7 @@ class RegEnPCA:
         """
         augment_times=0 ... no augmentation used in RegEnPCA
         """
-        total_num_labels = Const.NUM_TRAIN_SAMPLES * (1 + augment_times)
+        total_num_labels = Const.NUM_TRAIN_SAMPLES * (1 + augment_times)  # hard coded train_list_size, beware
         pca_label_array = np.zeros([total_num_labels, Const.LABEL_SHAPE])
         center = [Const.SRC_IMAGE_SHAPE[1] / 2, Const.SRC_IMAGE_SHAPE[0] / 2]
         i = 0

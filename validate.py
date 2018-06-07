@@ -35,8 +35,11 @@ test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.p
 
 # number of timesteps to be simulated (each step, the same data is fed)
 graphlstm_timesteps = 2
+learning_rate = 1e-3
 
-model_name = "regen41_graphlstm1t%i" % graphlstm_timesteps
+model_name = "regen41_graphlstm1t%i_outputscaling21x3wb_adamlr%f" % (graphlstm_timesteps, learning_rate)
+
+checkpoint_dir += r"/%s" % model_name
 
 
 # # PREPARE SESSION
@@ -51,7 +54,8 @@ K.set_session(sess)
 
 print("\n###   Loading Model: %s   ###\n" % model_name)
 
-epoch = 16
+# None loads last epoch, int loads specific epoch
+epoch = None
 
 input_shape = [None, *re.Const.MODEL_IMAGE_SHAPE]
 output_shape = [None, len(HAND_GRAPH_HANDS2017_INDEX_DICT), GLSTM_NUM_UNITS]
@@ -64,8 +68,12 @@ with sess.as_default():
     print("Loading meta graph …")
     loader = tf.train.import_meta_graph(checkpoint_dir + "/%s.meta" % model_name)
 
-    print("Restoring weights for epoch %i …" % epoch)
-    loader.restore(sess, checkpoint_dir + "/%s-%i" % (model_name, epoch))
+    if epoch is None:
+        print("Restoring weights for last epoch …")
+        loader.restore(sess, tf.train.latest_checkpoint(checkpoint_dir))
+    else:
+        print("Restoring weights for epoch %i …" % epoch)
+        loader.restore(sess, checkpoint_dir + "/%s-%i" % (model_name, epoch))
 
     print("Getting necessary tensors …")
     input_tensor, output_tensor, groundtruth_tensor, train_step, loss = tf.get_collection(COLLECTION)
@@ -105,6 +113,12 @@ validate_label = np.asarray(list(validate_label_gen))
 validate_label = np.reshape(validate_label, [-1, *output_shape[-2:]])
 
 print("Mean prediction error:", np.abs(validate_label - predictions).mean())  # todo which unit is this in?
+
+pred_joint_avg = np.mean(predictions, axis=0)
+actual_joint_avg = np.mean(validate_label, axis=0)
+
+print("Actual joints position average:\n%r" % actual_joint_avg)
+print("Predicted joints position average:\n%r" % pred_joint_avg)
 
 print("Validation done.")
 exit(0)

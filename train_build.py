@@ -22,10 +22,10 @@ import os
 
 # dataset path declarations
 
-prefix = "train-02"
-checkpoint_dir = r"/data2/GraphLSTM/%s" % prefix
+prefix = "train-03"
+checkpoint_dir = r"/home/matthias-k/GraphLSTM_data/%s" % prefix
 
-dataset_root = r"/data2/datasets/hands2017/data/hand2017_nor_img_new"
+dataset_root = r"/home/matthias-k/datasets/hands2017/data/hand2017_nor_img_new"
 train_and_validate_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)] + ["nor_00957032.pkl"]
 
 train_list, validate_list = train_validate_split(train_and_validate_list)
@@ -35,9 +35,11 @@ test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.p
 
 # number of timesteps to be simulated (each step, the same data is fed)
 graphlstm_timesteps = 2
-learning_rate = 1e-7
+learning_rate = 1e-3
 
-model_name = "regen41_graphlstm1t%i_adamlr%f" % (graphlstm_timesteps, learning_rate)
+model_name = "regen41_graphlstm1t%i_fc441_adamlr%f" % (graphlstm_timesteps, learning_rate)
+
+checkpoint_dir += r"/%s" % model_name
 
 
 # # PREPARE SESSION
@@ -56,8 +58,8 @@ print("\n###   Building Model: %s   ###\n" % model_name)
 print("Building RegionEnsemble network …")
 
 # initialize region_ensemble_net
-region_ensemble_net_pca = re.RegEnPCA(directory_prefix=prefix, use_precalculated_samples=True,
-                                      dataset_root=dataset_root, train_list=train_list)
+region_ensemble_net_pca = re.RegEnPCA(directory_prefix=prefix, use_precalculated_samples=False,
+                                      dataset_root=dataset_root, train_list=train_and_validate_list)
 region_ensemble_net = re.RegEnModel(directory_prefix=prefix)
 region_ensemble_net.compile(optimizer=Adam(), loss=re.soft_loss)
 region_ensemble_net.set_pca_bottleneck_weights(region_ensemble_net_pca)
@@ -66,14 +68,19 @@ regen_input_tensor = region_ensemble_net.input
 regen_output_tensor = region_ensemble_net.output
 # here the Region Ensemble network is done initialising
 
+# # RegEnNet output tensor reshaped to [ batch_size, 21, 3 ] for training of RegEnNet only
+# regen_output_tensor_21_3 = tf.reshape(regen_output_tensor, shape=[-1, 21, 3])
+
 
 print("Building GraphLSTM network …")
 
 # initialize Graph LSTM
 # since a well-defined node order is necessary to correctly communicate with the Region Ensemble network,
 # the graph must be created manually
-nxgraph = glstm.GraphLSTMNet.create_nxgraph(HAND_GRAPH_HANDS2017, num_units=3,
-                                            index_dict=HAND_GRAPH_HANDS2017_INDEX_DICT)
+nxgraph = glstm.GraphLSTMNet.create_nxgraph(HAND_GRAPH_HANDS2017,
+                                            num_units=3,
+                                            index_dict=HAND_GRAPH_HANDS2017_INDEX_DICT,
+                                            bias_initializer=tf.constant_initializer(1.))
 graph_lstm_net = glstm.GraphLSTMNet(nxgraph, shared_weights=glstm.NEIGHBOUR_CONNECTIONS_SHARED)
 
 # input dimensions of GraphLSTMNet: batch_size, max_time, number_of_nodes, input_size
@@ -90,6 +97,33 @@ glstm_output_full = graph_lstm_net.transpose_output_from_cells_first_to_batch_fi
 glstm_output = tf.unstack(glstm_output_full, axis=1)[-1]
 # here the Graph LSTM network is done initializing
 
+# Graph LSTM output is in range (-1, 1) because of tanh in the hidden state
+
+flattened_output_length = len(graph_lstm_net.output_size) * graph_lstm_net.output_size[0]
+
+glstm_output_flattened = tf.reshape(glstm_output, [tf.shape(glstm_output)[0], flattened_output_length])
+
+fc_1 = tf.layers.dense(glstm_output_flattened, flattened_output_length * 4)
+fc_1 = tf.layers.dropout(fc_1, training=K.learning_phase())  # Dropout
+fc_2 = tf.layers.dense(fc_1, flattened_output_length * 4)
+fc_2 = tf.layers.dropout(fc_2, training=K.learning_phase())  # Dropout
+fc_3 = tf.layers.dense(fc_2, flattened_output_length)
+
+fc_3_reshaped_to_output_dims = tf.reshape(fc_3, [tf.shape(fc_3)[0], len(graph_lstm_net.output_size), graph_lstm_net.output_size[0]])
+
+# # initialize weights for Graph LSTM output manipulation
+# with tf.variable_scope("glstm_output_scaling"):
+#     weight = tf.get_variable(
+#         name="weight", shape=[21,3],
+#         dtype=tf.float32,
+#         initializer=tf.constant_initializer(re.Const.SRC_IMAGE_SHAPE[0]))
+#     bias = tf.get_variable(
+#         name="bias", shape=[21,3],
+#         dtype=tf.float32,
+#         initializer=tf.constant_initializer(re.Const.SRC_IMAGE_SHAPE[0] // 2))
+#
+# glstm_scaled_output = tf.add(tf.multiply(weight, glstm_output), bias)
+
 print("Finished building model.\n")
 
 
@@ -104,7 +138,7 @@ input_shape = region_ensemble_net.input_shape  # = [None, *re.Const.MODEL_IMAGE_
 input_tensor = regen_input_tensor
 
 output_shape = [None, len(graph_lstm_net.output_size), graph_lstm_net.output_size[0]]
-output_tensor = glstm_output
+output_tensor = fc_3_reshaped_to_output_dims
 
 groundtruth_tensor = tf.placeholder(tf.float32, shape=output_shape)
 
