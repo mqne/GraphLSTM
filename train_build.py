@@ -37,9 +37,10 @@ test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.p
 graphlstm_timesteps = 2
 learning_rate = 1e-3
 
-model_name = "regen41_graphlstm1t%i_fc441_adamlr%f" % (graphlstm_timesteps, learning_rate)
+model_name = "regen41_graphlstm1t%i_fcrelu4d4d1_adamlr%f_withtensorboardgs" % (graphlstm_timesteps, learning_rate)
 
 checkpoint_dir += r"/%s" % model_name
+tensorboard_dir = checkpoint_dir + r"/tensorboard"
 
 
 # # PREPARE SESSION
@@ -58,7 +59,7 @@ print("\n###   Building Model: %s   ###\n" % model_name)
 print("Building RegionEnsemble network …")
 
 # initialize region_ensemble_net
-region_ensemble_net_pca = re.RegEnPCA(directory_prefix=prefix, use_precalculated_samples=False,
+region_ensemble_net_pca = re.RegEnPCA(directory_prefix=prefix, use_precalculated_samples=True,
                                       dataset_root=dataset_root, train_list=train_and_validate_list)
 region_ensemble_net = re.RegEnModel(directory_prefix=prefix)
 region_ensemble_net.compile(optimizer=Adam(), loss=re.soft_loss)
@@ -99,15 +100,17 @@ glstm_output = tf.unstack(glstm_output_full, axis=1)[-1]
 
 # Graph LSTM output is in range (-1, 1) because of tanh in the hidden state
 
+# todo replace FC by residual connections
+
 flattened_output_length = len(graph_lstm_net.output_size) * graph_lstm_net.output_size[0]
 
 glstm_output_flattened = tf.reshape(glstm_output, [tf.shape(glstm_output)[0], flattened_output_length])
 
-fc_1 = tf.layers.dense(glstm_output_flattened, flattened_output_length * 4)
-fc_1 = tf.layers.dropout(fc_1, training=K.learning_phase())  # Dropout
-fc_2 = tf.layers.dense(fc_1, flattened_output_length * 4)
-fc_2 = tf.layers.dropout(fc_2, training=K.learning_phase())  # Dropout
-fc_3 = tf.layers.dense(fc_2, flattened_output_length)
+fc_1 = tf.layers.dense(glstm_output_flattened, flattened_output_length * 4, activation=tf.nn.relu)
+fc_1_dropout = tf.layers.dropout(fc_1, training=K.learning_phase())  # Dropout
+fc_2 = tf.layers.dense(fc_1_dropout, flattened_output_length * 4, activation=tf.nn.relu)
+fc_2_dropout = tf.layers.dropout(fc_2, training=K.learning_phase())  # Dropout
+fc_3 = tf.layers.dense(fc_2_dropout, flattened_output_length, activation=tf.nn.relu)
 
 fc_3_reshaped_to_output_dims = tf.reshape(fc_3, [tf.shape(fc_3)[0], len(graph_lstm_net.output_size), graph_lstm_net.output_size[0]])
 
@@ -148,8 +151,19 @@ train_step = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss)
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
     print("Created new checkpoint directory `%s`." % checkpoint_dir)
-
 saver = tf.train.Saver(keep_checkpoint_every_n_hours=1, filename=checkpoint_dir)
+
+# gather tensors for tensorboard
+tf.summary.scalar('loss', loss)
+tf.summary.histogram('Graph LSTM flattened output', glstm_output_flattened)
+tf.summary.histogram('fc_1 output', fc_1)
+tf.summary.histogram('fc_2 output', fc_2)
+tf.summary.histogram('fc_3 output', fc_3)
+if not os.path.exists(tensorboard_dir):
+    os.makedirs(tensorboard_dir)
+    print("Created new tensorboard directory `%s`." % tensorboard_dir)
+merged = tf.summary.merge_all()
+training_summary_writer = tf.summary.FileWriter(tensorboard_dir, sess.graph)
 
 # gather tensors needed for resuming after loading
 tf.add_to_collection(COLLECTION, input_tensor)
@@ -157,6 +171,7 @@ tf.add_to_collection(COLLECTION, output_tensor)
 tf.add_to_collection(COLLECTION, groundtruth_tensor)
 tf.add_to_collection(COLLECTION, train_step)
 tf.add_to_collection(COLLECTION, loss)
+tf.add_to_collection(COLLECTION, merged)
 
 t = TQDMHelper()
 
@@ -170,6 +185,7 @@ with sess.as_default():
 
     print("Starting training.")
 
+    global_step = 0
     for epoch in range(start_epoch, max_epoch + 1):
         t.start()
         training_sample_generator = re.pair_batch_generator_one_epoch(dataset_root, train_list,
@@ -183,10 +199,12 @@ with sess.as_default():
             X = X.reshape([actual_batch_size, *input_shape[1:]])
             Y = Y.reshape([actual_batch_size, *output_shape[1:]])
 
-            _, loss_value = sess.run([train_step, loss], feed_dict={input_tensor: X,
-                                                                    groundtruth_tensor: Y,
-                                                                    K.learning_phase(): 1})
+            _, loss_value, summary = sess.run([train_step, loss, merged], feed_dict={input_tensor: X,
+                                                                                     groundtruth_tensor: Y,
+                                                                                     K.learning_phase(): 1})
 
+            training_summary_writer.add_summary(summary, global_step=global_step)
+            global_step += 1
             t.write("Current loss: %f" % loss_value)
 
             # todo: pass K.learning_phase(): 1 to feed_dict (for testing: 0)

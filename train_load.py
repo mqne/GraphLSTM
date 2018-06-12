@@ -37,9 +37,11 @@ test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.p
 graphlstm_timesteps = 2
 learning_rate = 1e-3
 
-model_name = "regen41_graphlstm1t%i_outputscaling21x3wb_adamlr%f" % (graphlstm_timesteps, learning_rate)
+#model_name = "regen41_graphlstm1t%i_outputscaling21x3wb_adamlr%f" % (graphlstm_timesteps, learning_rate)
+model_name = "regen41_graphlstm1t%i_fcrelu4d4d1_adamlr%f" % (graphlstm_timesteps, learning_rate)
 
 checkpoint_dir += r"/%s" % model_name
+tensorboard_dir = checkpoint_dir + r"/tensorboard"
 
 
 # # PREPARE SESSION
@@ -71,7 +73,7 @@ with sess.as_default():
     print("Restoring weights for epoch %i …" % load_epoch)
     loader.restore(sess, checkpoint_dir + "/%s-%i" % (model_name, load_epoch))
     print("Getting necessary tensors …")
-    input_tensor, output_tensor, groundtruth_tensor, train_step, loss = tf.get_collection(COLLECTION)
+    input_tensor, output_tensor, groundtruth_tensor, train_step, loss, merged = tf.get_collection(COLLECTION)
     print("Creating variable saver …")
     saver = tf.train.Saver(keep_checkpoint_every_n_hours=1, filename=checkpoint_dir)
     print("Resuming training.")
