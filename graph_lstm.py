@@ -113,7 +113,7 @@ class GraphLSTMCell(RNNCell):
     """
 
     def __init__(self, num_units, state_is_tuple=True, bias_initializer=None, weight_initializer=None,
-                 reuse=None, name=None):
+                 forget_gate_initializer=None, reuse=None, name=None):
         """Initialize the Graph LSTM cell.
 
         Args:
@@ -122,9 +122,14 @@ class GraphLSTMCell(RNNCell):
             the `c_state` and `m_state`.  If False, they are concatenated
             along the column axis.  The latter behavior will soon be deprecated.
           bias_initializer: The initializer that should be used for initializing
-            biases. If None, _init_weights uses a constant initializer of 0.
+            biases. If None, _init_weights uses a uniform initializer
+            in the interval [-0.1, 0.1).
           weight_initializer: The initializer that should be used for initializing
-            weights. If None, the tensorflow standard initializer is used.
+            weights. If None, _init_weights uses a uniform initializer
+            in the interval [-0.1, 0.1).
+          forget_gate_initializer: The initializer that should be used for initializing
+            the forget gate weight b_f. If None, _init_weights uses a
+            constant initializer of 1.
           reuse: (optional) Python boolean describing whether to reuse variables
             in an existing scope.  If not `True`, and the existing scope already has
             the given variables, an error is raised. todo: obsolete?
@@ -143,6 +148,7 @@ class GraphLSTMCell(RNNCell):
         self._state_is_tuple = state_is_tuple
         self._bias_initializer = bias_initializer
         self._weight_initializer = weight_initializer
+        self._forget_gate_initializer = forget_gate_initializer
 
     @property
     def state_size(self):
@@ -191,19 +197,30 @@ class GraphLSTMCell(RNNCell):
           A dict of weight name:tensorflow-weight pairs.
         """
         dtype = inputs.dtype
-        bias_initializer = init_ops.constant_initializer(0.0, dtype=dtype) if self._bias_initializer is None \
-            else self._bias_initializer
+        bias_initializer = init_ops.random_uniform_initializer(-0.1, 0.1, dtype=dtype) \
+            if self._bias_initializer is None else self._bias_initializer
+        weight_initializer = init_ops.random_uniform_initializer(-0.1, 0.1, dtype=dtype) \
+            if self._weight_initializer is None else self._weight_initializer
+        forget_gate_initializer = init_ops.constant_initializer(1.0, dtype=dtype) \
+            if self._forget_gate_initializer is None else self._forget_gate_initializer
 
         weight_dict = {}
 
         # initialize shared weights
         with vs.variable_scope(self._shared_scope) as scope:
             for weight_name in self._shared_weights:
-                if weight_name not in _BIASES:
+                if weight_name == _B_F:
+                    with vs.variable_scope(scope) as bias_scope:
+                        bias_scope.set_partitioner(None)
+                        weight = vs.get_variable(
+                            name=weight_name, shape=self._get_weight_shape(weight_name, inputs),
+                            dtype=dtype,
+                            initializer=forget_gate_initializer)
+                elif weight_name not in _BIASES:
                     weight = vs.get_variable(
                         name=weight_name, shape=self._get_weight_shape(weight_name, inputs),
                         dtype=dtype,
-                        initializer=self._weight_initializer)
+                        initializer=weight_initializer)
                 else:
                     with vs.variable_scope(scope) as bias_scope:
                         bias_scope.set_partitioner(None)
@@ -219,14 +236,20 @@ class GraphLSTMCell(RNNCell):
                 weight = vs.get_variable(
                     name=weight_name, shape=self._get_weight_shape(weight_name, inputs),
                     dtype=dtype,
-                    initializer=self._weight_initializer)
+                    initializer=weight_initializer)
                 weight_dict[weight_name] = weight
         for weight_name in _BIASES:
             if weight_name not in self._shared_weights:
-                weight = vs.get_variable(
-                    name=weight_name, shape=self._get_weight_shape(weight_name, inputs),
-                    dtype=dtype,
-                    initializer=bias_initializer)
+                if weight_name == _B_F:
+                    weight = vs.get_variable(
+                        name=weight_name, shape=self._get_weight_shape(weight_name, inputs),
+                        dtype=dtype,
+                        initializer=forget_gate_initializer)
+                else:
+                    weight = vs.get_variable(
+                        name=weight_name, shape=self._get_weight_shape(weight_name, inputs),
+                        dtype=dtype,
+                        initializer=bias_initializer)
                 weight_dict[weight_name] = weight
 
         return weight_dict

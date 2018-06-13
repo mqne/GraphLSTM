@@ -22,7 +22,7 @@ import os
 
 # dataset path declarations
 
-prefix = "train-03"
+prefix = "train-04"
 checkpoint_dir = r"/home/matthias-k/GraphLSTM_data/%s" % prefix
 
 dataset_root = r"/home/matthias-k/datasets/hands2017/data/hand2017_nor_img_new"
@@ -37,7 +37,7 @@ test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.p
 graphlstm_timesteps = 2
 learning_rate = 1e-3
 
-model_name = "regen41_graphlstm1t%i_fcrelu4d4d1_adamlr%f_withtensorboardgs" % (graphlstm_timesteps, learning_rate)
+model_name = "regen41_graphlstm1bf1t%i_rescon_adamlr%f" % (graphlstm_timesteps, learning_rate)
 
 checkpoint_dir += r"/%s" % model_name
 tensorboard_dir = checkpoint_dir + r"/tensorboard"
@@ -69,7 +69,7 @@ regen_input_tensor = region_ensemble_net.input
 regen_output_tensor = region_ensemble_net.output
 # here the Region Ensemble network is done initialising
 
-# # RegEnNet output tensor reshaped to [ batch_size, 21, 3 ] for training of RegEnNet only
+# # RegEnNet output tensor reshaped to [ batch_size, 21, 3 ]
 # regen_output_tensor_21_3 = tf.reshape(regen_output_tensor, shape=[-1, 21, 3])
 
 
@@ -80,39 +80,57 @@ print("Building GraphLSTM network …")
 # the graph must be created manually
 nxgraph = glstm.GraphLSTMNet.create_nxgraph(HAND_GRAPH_HANDS2017,
                                             num_units=3,
-                                            index_dict=HAND_GRAPH_HANDS2017_INDEX_DICT,
-                                            bias_initializer=tf.constant_initializer(1.))
+                                            index_dict=HAND_GRAPH_HANDS2017_INDEX_DICT)
 graph_lstm_net = glstm.GraphLSTMNet(nxgraph, shared_weights=glstm.NEIGHBOUR_CONNECTIONS_SHARED)
 
+# overall output dimensions: batch_size, number_of_nodes, output_size
+regen_output_tensor_reshaped = graph_lstm_net.reshape_input_for_dynamic_rnn(regen_output_tensor)
+
+# normalize RegEn net output
+regen_output_tensor_reshaped_normalized, undo_scaling = normalize_for_glstm(regen_output_tensor_reshaped)
+
+
 # input dimensions of GraphLSTMNet: batch_size, max_time, number_of_nodes, input_size
-regen_output_tensor_plus_timedim = graph_lstm_net.reshape_input_for_dynamic_rnn(regen_output_tensor,
-                                                                                timesteps=graphlstm_timesteps)
+graphlstm_input_tensor = graph_lstm_net.reshape_input_for_dynamic_rnn(regen_output_tensor_reshaped_normalized,
+                                                                      timesteps=graphlstm_timesteps)
 
 dynrnn_glstm_output_full, dynrnn_glstm_state = tf.nn.dynamic_rnn(graph_lstm_net,
-                                                                 inputs=regen_output_tensor_plus_timedim,
+                                                                 inputs=graphlstm_input_tensor,
                                                                  dtype=tf.float32)
 
 # reorder dimensions to [batch_size, max_time, number_of_nodes, output_size]
 glstm_output_full = graph_lstm_net.transpose_output_from_cells_first_to_batch_first(dynrnn_glstm_output_full)
 # extract last timestep from output
 glstm_output = tf.unstack(glstm_output_full, axis=1)[-1]
+# denormalize GraphLSTM output
+glstm_output_rescaled = undo_scaling(glstm_output)
+
+
+
+## allow upscaling of GLSTM output for increasing influence on final result
+#scale_factor = max(re.Const.SRC_IMAGE_SHAPE[0], re.Const.SRC_IMAGE_SHAPE[1]) * 2
+#glstm_output_scaled = tf.multiply(glstm_output, scale_factor)
 # here the Graph LSTM network is done initializing
 
 # Graph LSTM output is in range (-1, 1) because of tanh in the hidden state
+# employ residual connections around Graph LSTM
 
-# todo replace FC by residual connections
+residual_merge = tf.add(regen_output_tensor_reshaped, glstm_output_rescaled)
 
-flattened_output_length = len(graph_lstm_net.output_size) * graph_lstm_net.output_size[0]
+# todo replace FC by residual connections: done
 
-glstm_output_flattened = tf.reshape(glstm_output, [tf.shape(glstm_output)[0], flattened_output_length])
-
-fc_1 = tf.layers.dense(glstm_output_flattened, flattened_output_length * 4, activation=tf.nn.relu)
-fc_1_dropout = tf.layers.dropout(fc_1, training=K.learning_phase())  # Dropout
-fc_2 = tf.layers.dense(fc_1_dropout, flattened_output_length * 4, activation=tf.nn.relu)
-fc_2_dropout = tf.layers.dropout(fc_2, training=K.learning_phase())  # Dropout
-fc_3 = tf.layers.dense(fc_2_dropout, flattened_output_length, activation=tf.nn.relu)
-
-fc_3_reshaped_to_output_dims = tf.reshape(fc_3, [tf.shape(fc_3)[0], len(graph_lstm_net.output_size), graph_lstm_net.output_size[0]])
+# # FC layers 4 4 1 times output size
+# flattened_output_length = len(graph_lstm_net.output_size) * graph_lstm_net.output_size[0]
+#
+# glstm_output_flattened = tf.reshape(glstm_output, [tf.shape(glstm_output)[0], flattened_output_length])
+#
+# fc_1 = tf.layers.dense(glstm_output_flattened, flattened_output_length * 4, activation=tf.nn.relu)
+# fc_1_dropout = tf.layers.dropout(fc_1, training=K.learning_phase())  # Dropout
+# fc_2 = tf.layers.dense(fc_1_dropout, flattened_output_length * 4, activation=tf.nn.relu)
+# fc_2_dropout = tf.layers.dropout(fc_2, training=K.learning_phase())  # Dropout
+# fc_3 = tf.layers.dense(fc_2_dropout, flattened_output_length, activation=tf.nn.relu)
+#
+# fc_3_reshaped_to_output_dims = tf.reshape(fc_3, [tf.shape(fc_3)[0], len(graph_lstm_net.output_size), graph_lstm_net.output_size[0]])
 
 # # initialize weights for Graph LSTM output manipulation
 # with tf.variable_scope("glstm_output_scaling"):
@@ -141,7 +159,7 @@ input_shape = region_ensemble_net.input_shape  # = [None, *re.Const.MODEL_IMAGE_
 input_tensor = regen_input_tensor
 
 output_shape = [None, len(graph_lstm_net.output_size), graph_lstm_net.output_size[0]]
-output_tensor = fc_3_reshaped_to_output_dims
+output_tensor = residual_merge
 
 groundtruth_tensor = tf.placeholder(tf.float32, shape=output_shape)
 
@@ -155,10 +173,9 @@ saver = tf.train.Saver(keep_checkpoint_every_n_hours=1, filename=checkpoint_dir)
 
 # gather tensors for tensorboard
 tf.summary.scalar('loss', loss)
-tf.summary.histogram('Graph LSTM flattened output', glstm_output_flattened)
-tf.summary.histogram('fc_1 output', fc_1)
-tf.summary.histogram('fc_2 output', fc_2)
-tf.summary.histogram('fc_3 output', fc_3)
+tf.summary.histogram('Graph LSTM output', glstm_output)
+tf.summary.histogram('Region Ensemble net output', regen_output_tensor_reshaped)
+tf.summary.histogram('Network output', output_tensor)
 if not os.path.exists(tensorboard_dir):
     os.makedirs(tensorboard_dir)
     print("Created new tensorboard directory `%s`." % tensorboard_dir)
