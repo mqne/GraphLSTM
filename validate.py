@@ -87,9 +87,6 @@ with sess.as_default():
     print("Getting necessary tensors …")
     input_tensor, output_tensor, groundtruth_tensor, train_step, loss, merged = tf.get_collection(COLLECTION)
 
-    print("Initializing variables …")
-    sess.run(tf.global_variables_initializer())
-
     validate_image_batch_gen = re.image_batch_generator_one_epoch(dataset_root,
                                                                   validate_list,
                                                                   re.Const.VALIDATE_BATCH_SIZE,
@@ -104,7 +101,9 @@ with sess.as_default():
         # Y = Y.reshape([actual_batch_size, *output_shape[1:]])
         Y_dummy = np.zeros([actual_batch_size, 21, 3])  # necessary as the restored "merged" tensor computes the loss
 
-        batch_predictions, summary = sess.run([output_tensor, merged], feed_dict={input_tensor: X, groundtruth_tensor: Y_dummy, K.learning_phase(): 0})
+        batch_predictions, summary = sess.run([output_tensor, merged], feed_dict={input_tensor: X,
+                                                                                  groundtruth_tensor: Y_dummy,
+                                                                                  K.learning_phase(): 0})
         if predictions is not None:
             predictions = np.concatenate((predictions, batch_predictions))
         else:
