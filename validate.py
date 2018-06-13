@@ -19,10 +19,11 @@ import os
 # set plot style
 # sns.set_style("whitegrid")
 
+prefix, model_name = get_prefix_and_model_name()
 
 # dataset path declarations
 
-prefix = "train-03"
+# prefix = "train-03"
 checkpoint_dir = r"/home/matthias-k/GraphLSTM_data/%s" % prefix
 
 dataset_root = r"/home/matthias-k/datasets/hands2017/data/hand2017_nor_img_new"
@@ -38,7 +39,7 @@ graphlstm_timesteps = 2
 learning_rate = 1e-3
 
 #model_name = "regen41_graphlstm1t%i_outputscaling21x3wb_adamlr%f" % (graphlstm_timesteps, learning_rate)
-model_name = "regen41_graphlstm1t%i_fcrelu4d4d1_adamlr%f_withtensorboardgs" % (graphlstm_timesteps, learning_rate)
+# model_name = "regen41_graphlstm1t%i_fcrelu4d4d1_adamlr%f_withtensorboardgs" % (graphlstm_timesteps, learning_rate)
 
 checkpoint_dir += r"/%s" % model_name
 tensorboard_dir = checkpoint_dir + r"/tensorboard/validation"
@@ -65,7 +66,7 @@ output_shape = [None, len(HAND_GRAPH_HANDS2017_INDEX_DICT), GLSTM_NUM_UNITS]
 # gather tensorboard tensors
 if not os.path.exists(tensorboard_dir):
     os.makedirs(tensorboard_dir)
-    print("Created new tensorboard directory `%s`." % tensorboard_dir)
+    print("Created new tensorboard validation directory `%s`." % tensorboard_dir)
 validation_summary_writer = tf.summary.FileWriter(tensorboard_dir, sess.graph)
 
 

@@ -1,4 +1,4 @@
-from sys import stdout
+from sys import stdout, argv
 from tqdm import tqdm
 import tensorflow as tf
 
@@ -54,6 +54,24 @@ def normalize_for_glstm(tensor):  # todo move to GraphLSTMNet?
 
     return normalized_tensor, undo_scaling
 
+
+def get_from_commandline_args(count, args_string=None):
+    if len(argv) - 1 != count:
+        print("You need to enter exactly %i command line arguments%s, "
+              "but found %i" % (count, '' if args_string is None else "(%s)" % args_string, len(argv) - 1))
+        exit(1)
+
+    return tuple(argv[1:])
+
+
+# get prefix and model name from command line
+def get_prefix_and_model_name():
+    return get_from_commandline_args(2, "'prefix' and 'model_name'")
+
+
+def get_prefix_model_name_and_epoch():
+    r = get_from_commandline_args(3, "'prefix', 'model_name' and epoch")
+    return r[0], r[1], int(r[2])
 
 
 class TQDMHelper:

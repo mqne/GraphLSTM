@@ -19,10 +19,11 @@ import os
 # set plot style
 # sns.set_style("whitegrid")
 
+prefix, model_name, load_epoch = get_prefix_model_name_and_epoch()
 
 # dataset path declarations
 
-prefix = "train-02"
+# prefix = "train-02"
 checkpoint_dir = r"/data2/GraphLSTM/%s" % prefix
 
 dataset_root = r"/data2/datasets/hands2017/data/hand2017_nor_img_new"
@@ -38,7 +39,7 @@ graphlstm_timesteps = 2
 learning_rate = 1e-3
 
 #model_name = "regen41_graphlstm1t%i_outputscaling21x3wb_adamlr%f" % (graphlstm_timesteps, learning_rate)
-model_name = "regen41_graphlstm1t%i_fcrelu4d4d1_adamlr%f" % (graphlstm_timesteps, learning_rate)
+# model_name = "regen41_graphlstm1t%i_fcrelu4d4d1_adamlr%f" % (graphlstm_timesteps, learning_rate)
 
 checkpoint_dir += r"/%s" % model_name
 tensorboard_dir = checkpoint_dir + r"/tensorboard"
@@ -57,7 +58,7 @@ K.set_session(sess)
 print("\n###   Loading Model: %s   ###\n" % model_name)
 
 max_epoch = 100
-load_epoch = 2
+# load_epoch = 2
 
 input_shape = [None, *re.Const.MODEL_IMAGE_SHAPE]
 output_shape = [None, len(HAND_GRAPH_HANDS2017_INDEX_DICT), GLSTM_NUM_UNITS]
