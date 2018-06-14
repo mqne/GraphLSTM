@@ -13,6 +13,8 @@ and `cd` into it.
     cd GraphLSTM
 
 ### Prerequisites
+ - `tensorflow 1.8` or greater
+ 
 Apart from *[Tensorflow](https://www.tensorflow.org/install/)*, the following dependencies need to be fulfilled in order to get *GraphLSTM* up and running:
 
  - `python 3.6` or greater

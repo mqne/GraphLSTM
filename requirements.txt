@@ -1,5 +1,5 @@
 networkx==2.*
-tensorflow
+tensorflow>=1.8
 
 # required for unittests
 numpy

@@ -55,6 +55,17 @@ def normalize_for_glstm(tensor):  # todo move to GraphLSTMNet?
     return normalized_tensor, undo_scaling
 
 
+# learning rate multiplier for tensorflow >= 1.8
+# as suggested by user1735003 at https://stackoverflow.com/a/50388264
+def lr_mult(alpha):
+    @tf.custom_gradient
+    def _lr_mult(x):
+        def grad(dy):
+            return dy * alpha * tf.ones_like(x)
+        return x, grad
+    return _lr_mult
+
+
 def get_from_commandline_args(count, args_string=None):
     if len(argv) - 1 != count:
         print("You need to enter exactly %i command line arguments%s, "
