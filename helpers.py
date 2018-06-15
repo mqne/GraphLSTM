@@ -1,6 +1,7 @@
 from sys import stdout, argv
 from tqdm import tqdm
 import tensorflow as tf
+import numpy as np
 
 
 COLLECTION = "input-output-groundtruth-trainstep-loss"
@@ -58,6 +59,8 @@ def normalize_for_glstm(tensor):  # todo move to GraphLSTMNet?
 # learning rate multiplier for tensorflow >= 1.8
 # as suggested by user1735003 at https://stackoverflow.com/a/50388264
 def lr_mult(alpha):
+    """Usage: lr_mult(multiplier)(tensor)
+    """
     @tf.custom_gradient
     def _lr_mult(x):
         def grad(dy):
@@ -83,6 +86,34 @@ def get_prefix_and_model_name():
 def get_prefix_model_name_and_epoch():
     r = get_from_commandline_args(3, "'prefix', 'model_name' and epoch")
     return r[0], r[1], int(r[2])
+
+
+class ErrorCalculator:
+
+    @staticmethod
+    # error averaged over joints and dimensions [ variable_set_length ]
+    def per_frame(individual_errors):
+        return np.mean(individual_errors, axis=(1, 2))
+
+    @staticmethod
+    # joint and dimension error averaged over all samples [ 21, 3 ]
+    def per_joint_dim(individual_errors):
+        return np.mean(individual_errors, axis=0)
+
+    @staticmethod
+    # joint error averaged over samples and dimensions [ 21 ]
+    def per_joint(individual_errors):
+        return np.mean(individual_errors, axis=(0, 2))
+
+    @staticmethod
+    # dimension error averaged over samples and joints [ 3 ]
+    def per_dimension(individual_errors):
+        return np.mean(individual_errors, axis=(0, 1))
+
+    @staticmethod
+    # overall error
+    def overall_mean_error(individual_errors):
+        return np.mean(individual_errors)
 
 
 class TQDMHelper:

@@ -117,13 +117,25 @@ with sess.as_default():
 
 # mean absolute error
 
+print("Calculating errors …")
+
 # get ground truth labels
 validate_label_gen = re.sample_generator(dataset_root, "pose", validate_list)
 validate_label = np.asarray(list(validate_label_gen))
 # reshape from [set_size, 63] to [set_size, 21, 3]
 validate_label = np.reshape(validate_label, [-1, *output_shape[-2:]])
 
-print("Mean prediction error:", np.abs(validate_label - predictions).mean())  # todo which unit is this in?
+# each individual error [ validate_set_length, 21, 3 ]
+individual_error = np.abs(validate_label - predictions)
+
+# overall error
+overall_mean_error = ErrorCalculator.overall_mean_error(individual_error)
+
+np.save(tensorboard_dir + "/individual_error_%s%s.npy" % (model_name,
+                                                          (("_epoch" + str(epoch)) if epoch is not None else "")),
+        individual_error)
+
+print("Mean prediction error:", overall_mean_error)  # todo which unit is this in?
 
 pred_joint_avg = np.mean(predictions, axis=0)
 actual_joint_avg = np.mean(validate_label, axis=0)
@@ -132,7 +144,8 @@ print("Actual joints position average:\n%r" % actual_joint_avg)
 print("Predicted joints position average:\n%r" % pred_joint_avg)
 
 print("Validation done.")
-print("Point tensorboard to %s to get more insights." % tensorboard_dir)
+print("Point tensorboard to %s to get more insights. This directory also holds the .npy files for error analysis."
+      % tensorboard_dir)
 exit(0)
 
 

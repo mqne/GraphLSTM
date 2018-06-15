@@ -79,7 +79,7 @@ print("Building GraphLSTM network …")
 # since a well-defined node order is necessary to correctly communicate with the Region Ensemble network,
 # the graph must be created manually
 nxgraph = glstm.GraphLSTMNet.create_nxgraph(HAND_GRAPH_HANDS2017,
-                                            num_units=3,
+                                            num_units=GLSTM_NUM_UNITS,
                                             index_dict=HAND_GRAPH_HANDS2017_INDEX_DICT)
 graph_lstm_net = glstm.GraphLSTMNet(nxgraph, shared_weights=glstm.NEIGHBOUR_CONNECTIONS_SHARED)
 
