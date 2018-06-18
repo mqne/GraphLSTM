@@ -352,8 +352,8 @@ class RegEnModel(Model):
      Original implementation by Kai Akiyama, Robotics Vision Lab, NAIST.
      """
 
-    def __init__(self, directory_prefix):
-        super().__init__(*self._build_model())
+    def __init__(self, directory_prefix, result_layer=True):
+        super().__init__(*self._build_model(result_layer=result_layer))
         self._directory_prefix = directory_prefix
 
     @property
@@ -361,7 +361,7 @@ class RegEnModel(Model):
         return self._directory_prefix
 
     @staticmethod
-    def _build_model():
+    def _build_model(result_layer=True):
         from keras.layers import Input, Convolution2D, MaxPooling2D, add, Lambda, Dense, Flatten, Dropout, concatenate
         from keras import regularizers
 
@@ -539,9 +539,10 @@ class RegEnModel(Model):
 
             # Result
 
-            com = Dense(units=Const.LABEL_SHAPE,
-                        kernel_regularizer=regularizers.l2(Const.WEIGHT_DECAY),
-                        )(com)
+            if result_layer:
+                com = Dense(units=Const.LABEL_SHAPE,
+                            kernel_regularizer=regularizers.l2(Const.WEIGHT_DECAY),
+                            )(com)
 
             predict = com
 

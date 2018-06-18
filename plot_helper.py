@@ -60,8 +60,20 @@ def average_frame_error(individual_errors, savepath=None, figsize=(5, 3), max_er
         plt.savefig(savepath + ".pdf")
     else:
         plt.show()
-    plt.rc('font', size=default_rcParams['font.size'])
     plt.close()
+    plt.rc('font', size=default_rcParams['font.size'])
+    # more potentially interesting rc values: lines.linewidth=1.5, lines.markersize=6.0
+    # for more see plt.rcParams
 
 
 set_thesis_style()
+
+
+def main():
+    import sys
+
+    raise NotImplementedError
+
+
+if __name__ == "__main__":
+    main()
