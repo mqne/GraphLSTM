@@ -1,23 +1,25 @@
 import tensorflow as tf
+from numpy.core.multiarray import dtype
 from tensorflow.python.framework import tensor_shape
 import keras.backend as K
 
-kernel_regularizer = tf.contrib.layers.l2_regularizer(re.Const.WEIGHT_DECAY)
-loss_func = re.soft_loss
-ground_truth = tf.placeholder ## todo
-
-hyp_input = regen_40dim_output_tensor
+# kernel_regularizer = tf.contrib.layers.l2_regularizer(re.Const.WEIGHT_DECAY)
+# loss_func = re.soft_loss
+# ground_truth = tf.placeholder ## todo
+#
+# hyp_input = regen_40dim_output_tensor
 
 HYPOTHESES_AXIS = 1
 
 
 class DenseMultipleHypothesesLayer(tf.layers.Layer):
 
-    def __init__(self, units, hypotheses_count, loss_func, epsilon=0.05, p_dropout=0.01, kernel_regularizer=None, name=None):
+    def __init__(self, units, hypotheses_count, loss_func, groundtruth_tensor, epsilon=0.05, p_dropout=0.01, kernel_regularizer=None, name=None):
         super().__init__(name=name)
         self._units = units
         self._hypotheses_count = hypotheses_count
         self._loss_func = loss_func
+        self._groundtruth_tensor = groundtruth_tensor
         self._epsilon = epsilon
         self._p_dropout = p_dropout
         self._kernel_regularizer = kernel_regularizer
@@ -31,10 +33,12 @@ class DenseMultipleHypothesesLayer(tf.layers.Layer):
         return hyps
 
     # soft Kronecker delta
-    def kd(self, a):
-        if a:
-            return 1 - self._epsilon
-        return self._epsilon / (self._hypotheses_count - 1)
+    def kd(self, a, n):
+        return tf.cond(n > 1,
+                       true_fn=lambda: tf.cond(a,
+                                               true_fn=lambda: 1 - self._epsilon,
+                                               false_fn=lambda: self._epsilon / (n - 1)),
+                       false_fn=lambda: 1)
 
     # return n predictions stacked along axis HYPOTHESES_AXIS = 1 as well as the meta loss
     # TODO: implement dropout in training
@@ -48,16 +52,28 @@ class DenseMultipleHypothesesLayer(tf.layers.Layer):
 
         output = tf.stack(hyps, axis=HYPOTHESES_AXIS)
 
-        if K.learning_phase() == 0:
-            return output, None
+        return output, tf.cond(tf.equal(K.learning_phase(), 0),
+                               true_fn=lambda: None,
+                               false_fn=lambda: self._loss_learning(hyps))
 
-        hyps_losses = [self._loss_func(ground_truth, h) for h in hyps]
+    @staticmethod
+    def _call_predicting(output):
+        return output, None
 
-        min_loss_index = tf.argmin(hyps_losses)
+    def _loss_learning(self, hyps):
+        hyps_losses = [self._loss_func(self._groundtruth_tensor, h) for h in hyps]
 
-        weighted_losses = [self.kd(i == min_loss_index) * hyps_losses[i] for i in range(len(hyps))]
+        n_dropout = tf.to_int32(tf.log(tf.random_uniform([])) / tf.log(self._p_dropout))
+        # not allowing less than 1 hypothesis
+        n_hyps = tf.maximum(len(hyps_losses) - n_dropout, 1)
 
-        return output, tf.reduce_sum(weighted_losses)
+        hyps_losses_cropped = tf.random_crop(tf.random_shuffle(hyps_losses), [n_hyps])
+
+        min_loss_index = tf.argmin(hyps_losses_cropped, output_type=tf.int32)
+
+        weighted_losses = [self.kd(tf.equal(i, min_loss_index), n_hyps) * hyps_losses_cropped[i] for i in range(n_hyps)]
+
+        return tf.reduce_sum(weighted_losses)
 
     def compute_output_shape(self, input_shape):
         input_shape = tensor_shape.TensorShape(input_shape)
