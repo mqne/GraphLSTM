@@ -57,10 +57,18 @@ class DenseMultipleHypothesesLayer(tf.layers.Layer):
         return hyps
 
     # soft Kronecker delta array
-    def kds(self, index, n):
+    def kds(self, index, m, length=None):
+        """Return a vector populated by epsilon at index index, and epsilon / (m - 1).
+
+        If length is given, it will be the length of the returned vector,
+        with the additional elements equaling epsilon / (m - 1) as well.
+        This is useful for dropout via multiplication by 0.
+        """
+        if length is None:
+            length = m
         kd_1 = 1 - self._epsilon
-        kd_0 = self._epsilon / tf.to_float(tf.maximum(n, 2) - 1)
-        sparse = tf.scatter_nd([[index]], [kd_1 - kd_0], [n])
+        kd_0 = self._epsilon / tf.to_float(tf.maximum(m, 2) - 1)
+        sparse = tf.scatter_nd([[index]], [kd_1 - kd_0], [length])
         return kd_0 + sparse
 
     # return n predictions stacked along axis HYPOTHESES_AXIS = 1 as well as the meta loss
@@ -83,20 +91,49 @@ class DenseMultipleHypothesesLayer(tf.layers.Layer):
         # calculate losses for each hypothesis
         hyps_losses_all = [self._loss_func(self._groundtruth_tensor, h) for h in hyps]
 
+        # store the number of actual hypotheses.
+        # This should be equal to self._hypotheses_count if the layer has been initialized normally.
+        h_length = len(hyps_losses_all)
+
         # calculate how many hypothesis to randomly leave out ("drop out")
         n_dropout = tf.to_int32(tf.log(tf.random_uniform([])) / tf.log(self._p_dropout))
 
         # not allowing less than 1 hypothesis
-        n_hyps = tf.maximum(len(hyps_losses_all) - n_dropout, 1)
+        n_hyps = tf.maximum(h_length - n_dropout, 1)
 
-        # remove hypotheses to be left out
-        hyps_losses_cropped = tf.random_shuffle(hyps_losses_all)[:n_hyps]
+        # calculate pseudo loss that is worse than any existing loss
+        bad_loss = tf.reduce_max(hyps_losses_all) + 1
+
+        # determine which hypotheses to drop.
+        # Note: as indices are randomly sampled, hypotheses may be chosen more than once to be dropped, yet the overall
+        # amount of chosen indices remains < the number of hypotheses. Dropping a high number n of hypotheses
+        # simultaneously is thus less likely than just p_dropout^n. As these probabilities are very low either way,
+        # and a, in absolute terms, slightly lower probability of dropping many hypotheses in the same step does not
+        # influence the overall result significantly, this detail is ignored for the sake of easier implementation.
+        # Implementation via tf.random_shuffle does not work, as that function does not preserve gradient information.
+        drop_indices = tf.random_uniform([h_length - n_hyps, 1],
+                                         maxval=h_length, dtype=tf.int32)
+
+        # add one dummy entry so that we don't have to care about an empty dropout array
+        drop_indices_incl_dummy = tf.concat([drop_indices, [[h_length]]], axis=0)
+        hyps_losses_all.append(0)
+
+        # make sure the best hypothesis is chosen from a non-dropped loss by increasing to-be-dropped losses
+        hyps_losses_all += tf.scatter_nd(drop_indices_incl_dummy,
+                                         tf.squeeze(tf.ones_like(drop_indices_incl_dummy, dtype=tf.float32) * bad_loss, axis=1),
+                                         [h_length + 1])
 
         # get index of best hypothesis
-        min_loss_index = tf.argmin(hyps_losses_cropped, output_type=tf.int32)
+        min_loss_index = tf.argmin(hyps_losses_all, output_type=tf.int32)
+
+        # now set dropped losses to 0
+        hyps_losses_all *= tf.scatter_nd(drop_indices_incl_dummy,
+                                         tf.squeeze(tf.zeros_like(drop_indices_incl_dummy, dtype=tf.float32), axis=1) - 1,
+                                         [h_length + 1]
+                                         ) + 1
 
         # weigh each loss by the soft kronecker delta via vector of kronecker deltas self.kds()
-        weighted_losses = hyps_losses_cropped * self.kds(min_loss_index, n_hyps)
+        weighted_losses = hyps_losses_all * self.kds(min_loss_index, n_hyps, h_length + 1)
 
         # sum over weighted losses and return
         return tf.reduce_sum(weighted_losses)
@@ -146,6 +183,8 @@ def dense_mhp(inputs, units, hypotheses_count, loss_func, groundtruth_tensor, ep
                                          p_dropout=p_dropout,
                                          kernel_regularizer=kernel_regularizer,
                                          name=name)
+    # quick way to make the input 'forget' about its keras nature, which otherwise creates weird issues
+    inputs = tf.multiply(inputs, 1.)
     return layer.apply(inputs)
 
 
