@@ -31,8 +31,9 @@ class DenseMultipleHypothesesLayer(tf.layers.Layer):
           Defines the name of the tensorflow layer.
 
     Returns:
-        A tf.layer consisting of multiple dense hypotheses layers, trained with
-          the MHP meta loss.
+        A tuple (mhp_layer, meta_loss), where
+          mhp_layer has the hypotheses stacked along axis HYPOTHESIS_AXIS, and
+          meta_loss is the meta loss.
     """
 
     def __init__(self, units, hypotheses_count, loss_func, groundtruth_tensor, epsilon=0.05, p_dropout=0.01,
@@ -55,19 +56,12 @@ class DenseMultipleHypothesesLayer(tf.layers.Layer):
 
         return hyps
 
-    # soft Kronecker delta
-    def kd(self, a, n):
-        return tf.cond(n > 1,
-                       true_fn=lambda: tf.cond(a,
-                                               true_fn=lambda: 1 - self._epsilon,
-                                               false_fn=lambda: self._epsilon / (n - 1)),
-                       false_fn=lambda: 1)
-
     # soft Kronecker delta array
-    def kda(self, index, n):
-        a = tf.constant(self._epsilon / (n - 1), dtype=tf.float32, shape=[n])
-        # todo solve by setting kronecker delta to 0 for dropped-out predictions
-
+    def kds(self, index, n):
+        kd_1 = 1 - self._epsilon
+        kd_0 = self._epsilon / tf.to_float(tf.maximum(n, 2) - 1)
+        sparse = tf.scatter_nd([[index]], [kd_1 - kd_0], [n])
+        return kd_0 + sparse
 
     # return n predictions stacked along axis HYPOTHESES_AXIS = 1 as well as the meta loss
     def call(self, inputs):
@@ -82,28 +76,27 @@ class DenseMultipleHypothesesLayer(tf.layers.Layer):
 
         return output, tf.cond(K.learning_phase(),
                                true_fn=lambda: self._meta_loss(hyps),
-                               false_fn=lambda: None)
+                               false_fn=lambda: -1.)
 
     # meta loss used for learning
     def _meta_loss(self, hyps):
         # calculate losses for each hypothesis
-        hyps_losses = [self._loss_func(self._groundtruth_tensor, h) for h in hyps]
+        hyps_losses_all = [self._loss_func(self._groundtruth_tensor, h) for h in hyps]
 
         # calculate how many hypothesis to randomly leave out ("drop out")
         n_dropout = tf.to_int32(tf.log(tf.random_uniform([])) / tf.log(self._p_dropout))
 
         # not allowing less than 1 hypothesis
-        n_hyps = tf.maximum(len(hyps_losses) - n_dropout, 1)
+        n_hyps = tf.maximum(len(hyps_losses_all) - n_dropout, 1)
 
         # remove hypotheses to be left out
-        hyps_losses_cropped = tf.random_shuffle(hyps_losses)[:n_hyps]
+        hyps_losses_cropped = tf.random_shuffle(hyps_losses_all)[:n_hyps]
 
         # get index of best hypothesis
         min_loss_index = tf.argmin(hyps_losses_cropped, output_type=tf.int32)
 
-        # weigh each loss by the soft kronecker delta self.kd()
-        w = tf.map_fn()
-        weighted_losses = [self.kd(tf.equal(i, min_loss_index), n_hyps) * hyps_losses_cropped[i] for i in tf.range(n_hyps)]
+        # weigh each loss by the soft kronecker delta via vector of kronecker deltas self.kds()
+        weighted_losses = hyps_losses_cropped * self.kds(min_loss_index, n_hyps)
 
         # sum over weighted losses and return
         return tf.reduce_sum(weighted_losses)
@@ -142,8 +135,7 @@ def dense_mhp(inputs, units, hypotheses_count, loss_func, groundtruth_tensor, ep
           Defines the name of the tensorflow layer.
 
     Returns:
-        A tf.layer consisting of multiple dense hypotheses layers, trained with
-          the MHP meta loss.
+        A tuple (mhp_layer, meta_loss)
     """
 
     layer = DenseMultipleHypothesesLayer(units,
