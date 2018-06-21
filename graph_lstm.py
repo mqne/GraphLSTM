@@ -470,7 +470,8 @@ class GraphLSTMNet(RNNCell):
                 raise TypeError("confidence_dict must be of type 'dict', but found '%s'." % type(confidence_dict))
             for node_name, confidence in confidence_dict.items():
                 if isinstance(confidence, Tensor):
-                    raise NotImplementedError("Support for dynamic confidence values is currently not implemented.")
+                    raise NotImplementedError("Support for dynamic confidence values is currently not implemented. "
+                                              "Please use python float values instead of Tensors.")
                 try:
                     nxgraph.nodes[node_name][_CONFIDENCE] = confidence if isinstance(confidence, Tensor) else float(
                         confidence)
