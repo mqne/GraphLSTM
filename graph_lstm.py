@@ -100,17 +100,6 @@ class GraphLSTMCell(RNNCell):
     in cooperation with the
     Robotics Vision Lab,
     Nara Institute of Science and Technology, Japan.
-
-    The implementation is work in progress.
-
-    > We add forget_bias (default: 1) to the biases of the forget gate in order to
-    > reduce the scale of forgetting in the beginning of the training.
-    >
-    > It does not allow cell clipping, a projection layer, and does not
-    > use peep-hole connections: it is the basic baseline.
-    >
-    > For advanced models, please use the full @{tf.nn.rnn_cell.LSTMCell}
-    > that follows.
     """
 
     def __init__(self, num_units, state_is_tuple=True, bias_initializer=None, weight_initializer=None,
@@ -405,7 +394,13 @@ class GraphLSTMNet(RNNCell):
     Robotics Vision Lab,
     Nara Institute of Science and Technology, Japan.
 
-    The implementation is work in progress."""
+    This implementation does not support dynamic confidence values.
+    The confidence values for each node at network creation time
+    thus determine the update order.
+    If you want to set the update order manually, create the nxgraph
+    first by invoking `create_nxgraph` and then pass the resulting
+    graph to the GraphLSTMNet constructor.
+    """
 
     def _cell(self, node, nxgraph=None):
         """Return the GraphLSTMCell belonging to a node.
@@ -437,6 +432,9 @@ class GraphLSTMNet(RNNCell):
           confidence_dict (dict): Holds the confidence values for the nodes that should
             start off with a confidence value different from 0. Optional.
             Format: {node_name_1: confidence_1, ...}
+            NOTE: currently, the confidence value is only read once, at network creation
+            time. Specifying a confidence_dict when creating the graph is thus the only
+            way to determine the GraphLSTM update order.
           index_dict (dict): Holds the index values for all nodes if the indices should
             be custom. If not None, parameter is_sorted is ignored. Optional.
             Format: {node_name_1: index_1, ...}
