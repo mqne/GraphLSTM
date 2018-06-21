@@ -3,9 +3,6 @@ import matplotlib.pyplot as plt
 from helpers import ErrorCalculator as Ec
 
 
-default_rcParams = plt.rcParams
-
-
 # Define TUM corporate design colors
 # Taken from http://portal.mytum.de/corporatedesign/index_print/vorlagen/index_farben
 class TumColours:
@@ -61,7 +58,7 @@ def average_frame_error(individual_errors, savepath=None, figsize=(5, 3), max_er
     else:
         plt.show()
     plt.close()
-    plt.rc('font', size=default_rcParams['font.size'])
+    plt.rc('font', size=plt.rcParamsDefault['font.size'])
     # more potentially interesting rc values: lines.linewidth=1.5, lines.markersize=6.0
     # for more see plt.rcParams
 
