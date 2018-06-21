@@ -30,6 +30,7 @@ from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import variable_scope as vs
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.util import nest
+from tensorflow import Tensor
 
 
 # identifiers for node attributes
@@ -468,8 +469,11 @@ class GraphLSTMNet(RNNCell):
             if not isinstance(confidence_dict, dict):
                 raise TypeError("confidence_dict must be of type 'dict', but found '%s'." % type(confidence_dict))
             for node_name, confidence in confidence_dict.items():
+                if isinstance(confidence, Tensor):
+                    raise NotImplementedError("Support for dynamic confidence values is currently not implemented.")
                 try:
-                    nxgraph.nodes[node_name][_CONFIDENCE] = float(confidence)
+                    nxgraph.nodes[node_name][_CONFIDENCE] = confidence if isinstance(confidence, Tensor) else float(
+                        confidence)
                 except KeyError as e:
                     raise KeyError("Node '%s' in confidence_dict does not exist in nxgraph." % node_name) from e
         for node_name, node_dict in nxgraph.nodes(data=True):

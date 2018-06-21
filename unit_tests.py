@@ -987,13 +987,17 @@ class TestGraphLSTMCellAndNet(tf.test.TestCase):
         # c is the node with the highest confidence, i.e. will be initialized first, i.e. will lend its initializers
         #   to the shared weights
         cell_a = glstm.GraphLSTMCell(2, bias_initializer=tf.constant_initializer(1),
-                                     weight_initializer=tf.initializers.identity(1))
+                                     weight_initializer=tf.initializers.identity(1),
+                                     forget_gate_initializer=tf.constant_initializer(1))
         cell_b = glstm.GraphLSTMCell(2, bias_initializer=tf.constant_initializer(2),
-                                     weight_initializer=tf.initializers.identity(2))
+                                     weight_initializer=tf.initializers.identity(2),
+                                     forget_gate_initializer=tf.constant_initializer(0))
         cell_c = glstm.GraphLSTMCell(2, bias_initializer=tf.constant_initializer(-1),
-                                     weight_initializer=tf.initializers.identity(-1))
+                                     weight_initializer=tf.initializers.identity(-1),
+                                     forget_gate_initializer=tf.constant_initializer(-1))
         cell_d = glstm.GraphLSTMCell(2, bias_initializer=tf.constant_initializer(-2),
-                                     weight_initializer=tf.initializers.identity(-2))
+                                     weight_initializer=tf.initializers.identity(-2),
+                                     forget_gate_initializer=tf.constant_initializer(2))
 
         weight_dict_a = {
             glstm._W_U: 1,
@@ -1027,7 +1031,7 @@ class TestGraphLSTMCellAndNet(tf.test.TestCase):
             glstm._U_CN: -1,
             glstm._U_ON: -1,
             glstm._B_U: 2,
-            glstm._B_F: 2,
+            glstm._B_F: 0,
             glstm._B_C: 2,
             glstm._B_O: 2,
         }
@@ -1063,7 +1067,7 @@ class TestGraphLSTMCellAndNet(tf.test.TestCase):
             glstm._U_CN: -1,
             glstm._U_ON: -1,
             glstm._B_U: -2,
-            glstm._B_F: -2,
+            glstm._B_F: 2,
             glstm._B_C: -2,
             glstm._B_O: -2,
         }
