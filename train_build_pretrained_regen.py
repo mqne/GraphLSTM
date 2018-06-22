@@ -158,7 +158,7 @@ train_step = tf.train.AdamOptimizer(learning_rate=learning_rate, name="Adam_%s" 
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
     print("Created new checkpoint directory `%s`." % checkpoint_dir)
-saver = tf.train.Saver(keep_checkpoint_every_n_hours=1, filename=checkpoint_dir)
+saver = tf.train.Saver(keep_checkpoint_every_n_hours=2, filename=checkpoint_dir)
 
 # gather tensors for tensorboard
 s_loss = tf.summary.scalar('loss', loss)
@@ -217,7 +217,8 @@ with sess.as_default():
             # todo: pass K.learning_phase(): 1 to feed_dict (for testing: 0)
         t.stop()
         print("Training loss after epoch %i: %f" % (epoch, loss_value))
-        saver.save(sess, save_path=checkpoint_dir + "/%s" % model_name, global_step=epoch)
+        if epoch % 2 == 0:
+            saver.save(sess, save_path=checkpoint_dir + "/%s" % model_name, global_step=epoch)
 
 print("Training done, exiting.")
 exit(0)
