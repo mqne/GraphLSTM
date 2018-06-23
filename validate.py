@@ -19,7 +19,7 @@ import os
 # set plot style
 # sns.set_style("whitegrid")
 
-prefix, model_name = get_prefix_and_model_name()
+prefix, model_name, epoch = get_prefix_model_name_optionally_epoch()
 
 # dataset path declarations
 
@@ -56,9 +56,11 @@ K.set_session(sess)
 # # LOAD MODEL
 
 print("\n###   Loading Model: %s   ###\n" % model_name)
+epoch_str = "Last epoch" if epoch is None else ("Epoch %i" % epoch)
+print("##   %s   ##\n" % epoch_str)
 
 # None loads last epoch, int loads specific epoch
-epoch = None
+# epoch = None
 
 input_shape = [None, *re.Const.MODEL_IMAGE_SHAPE]
 output_shape = [None, len(HAND_GRAPH_HANDS2017_INDEX_DICT), GLSTM_NUM_UNITS]
@@ -112,6 +114,13 @@ with sess.as_default():
         global_step += 1
         # todo: pass K.learning_phase(): 1 to feed_dict (for testing: 0)
 
+# # STORE PREDICTION RESULTS
+
+npyname = predictions_npy_name(model_name, epoch)
+print("Storing prediction results at %s …" % npyname)
+
+np.save(tensorboard_dir + "/" + npyname, predictions)
+
 
 # # CALCULATE RESULTS
 
@@ -129,13 +138,14 @@ validate_label = np.reshape(validate_label, [-1, *output_shape[-2:]])
 individual_error = np.abs(validate_label - predictions)
 
 # overall error
-overall_mean_error = ErrorCalculator.overall_mean_error(individual_error)
+overall_mean_error = ErrorCalculator.overall_mean_error_euclidean(individual_error)
 
 np.save(tensorboard_dir + "/individual_error_%s%s.npy" % (model_name,
                                                           (("_epoch" + str(epoch)) if epoch is not None else "")),
         individual_error)
 
-print("Mean prediction error:", overall_mean_error)  # todo which unit is this in?
+print("\n# %s" % epoch_str)
+print("Mean prediction error (euclidean):", overall_mean_error)  # todo which unit is this in?
 
 pred_joint_avg = np.mean(predictions, axis=0)
 actual_joint_avg = np.mean(validate_label, axis=0)

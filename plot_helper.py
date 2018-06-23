@@ -38,19 +38,19 @@ def set_thesis_style():
 
 # plot cumulative error across validation frames
 # todo plot several networks at once
-def average_frame_error(individual_errors, savepath=None, figsize=(5, 3), max_err=40, fontsize=10,
+def plot_accuracy_curve(individual_errors, xlabel, ylabel, savepath=None, figsize=(5, 3), max_err=40, fontsize=10,
                         colour=TumColours.Blue):
-    sorted_error_per_frame = np.sort(Ec.per_frame(individual_errors))
-    y = np.linspace(0, 100, len(sorted_error_per_frame) + 1)
-    x = np.append(sorted_error_per_frame, sorted_error_per_frame[-1])
+    sorted_errors = np.sort(individual_errors)
+    y = np.linspace(0, 100, len(sorted_errors) + 1)
+    x = np.append(sorted_errors, sorted_errors[-1])
     plt.rc('font', size=fontsize)
     plt.figure(num=None, figsize=figsize)
     plt.step(x, y, color=colour)
     plt.xlim(0, max_err)
     plt.ylim(0, 100)
     plt.yticks(np.linspace(0, 100, 3))
-    plt.xlabel(r'Average Frame Error (TODO)')  # todo
-    plt.ylabel(r'No.\ of Frames (\%)')
+    plt.xlabel(xlabel)  # todo
+    plt.ylabel(ylabel)
 
     if savepath is not None:
         plt.savefig(savepath + ".pgf")
@@ -61,6 +61,49 @@ def average_frame_error(individual_errors, savepath=None, figsize=(5, 3), max_er
     plt.rc('font', size=plt.rcParamsDefault['font.size'])
     # more potentially interesting rc values: lines.linewidth=1.5, lines.markersize=6.0
     # for more see plt.rcParams
+
+
+def plot_average_frame_error(errors, xlabel=r'Average Joint Error (mm)', ylabel=r'No.\ of Frames (\%)',
+                             savepath=None, figsize=(5, 3), max_err=40, fontsize=10,
+                             colour=TumColours.Blue):
+    plot_accuracy_curve(Ec.per_frame(errors),
+                        xlabel=xlabel,
+                        ylabel=ylabel,
+                        savepath=savepath,
+                        figsize=figsize,
+                        max_err=max_err,
+                        fontsize=fontsize,
+                        colour=colour)
+
+
+# standard error metric 2 from hands2017 paper
+def plot_ratio_of_joints_within_bound(individual_errors, xlabel=r'Joint Error (mm)', ylabel=r'No.\ of Joints (\%)',
+                                      savepath=None, figsize=(5, 3), max_err=40, fontsize=10,
+                                      colour=TumColours.Blue):
+    plot_accuracy_curve(Ec.per_frame_and_joint(individual_errors).flatten(),
+                        xlabel=xlabel,
+                        ylabel=ylabel,
+                        savepath=savepath,
+                        figsize=figsize,
+                        max_err=max_err,
+                        fontsize=fontsize,
+                        colour=colour)
+
+
+# standard error metric 3 from hands2017 paper
+def plot_ratio_of_frames_with_all_joints_within_bound(individual_errors, xlabel=r'Maximum Joint Error (mm)',
+                                                      ylabel=r'No.\ of Frames (\%)', savepath=None, figsize=(5, 3),
+                                                      max_err=40,
+                                                      fontsize=10,
+                                                      colour=TumColours.Blue):
+    plot_accuracy_curve(np.amax(Ec.per_frame_and_joint(individual_errors), axis=1),
+                        xlabel=xlabel,
+                        ylabel=ylabel,
+                        savepath=savepath,
+                        figsize=figsize,
+                        max_err=max_err,
+                        fontsize=fontsize,
+                        colour=colour)
 
 
 set_thesis_style()

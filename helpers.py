@@ -4,6 +4,7 @@ import tensorflow as tf
 import numpy as np
 
 
+# tensorflow collection name for saving important tensors
 COLLECTION = "input-output-groundtruth-trainstep-loss"
 
 # each cell has three units, one per dimension (x, y, z)
@@ -27,6 +28,13 @@ HAND_GRAPH_HANDS2017_INDEX_DICT = {"Wrist": 0,
                                    "MPIP": 12, "MDIP": 13, "MTIP": 14,
                                    "RPIP": 15, "RDIP": 16, "RTIP": 17,
                                    "PPIP": 18, "PDIP": 19, "PTIP": 20}
+
+
+# camera parameters for the hands2017 dataset
+FX_HANDS2017 = 475.065948
+FY_HANDS2017 = 475.065857
+CX_HANDS2017 = 315.944855
+CY_HANDS2017 = 245.287079
 
 
 def train_validate_split(train_validate_list, split=0.8):
@@ -83,17 +91,79 @@ def get_prefix_and_model_name():
     return get_from_commandline_args(2, "'prefix' and 'model_name'")
 
 
+# get prefix, model name and epoch from command line
 def get_prefix_model_name_and_epoch():
     r = get_from_commandline_args(3, "'prefix', 'model_name' and epoch")
     return r[0], r[1], int(r[2])
 
 
+# get prefix, model name and optionally epoch from command line
+def get_prefix_model_name_optionally_epoch():
+    count = len(argv) - 1
+    if count == 2:
+        return (*get_prefix_and_model_name(), None)
+    elif count == 3:
+        return get_prefix_model_name_and_epoch()
+    else:
+        print("You need to enter either 2 or 3 command line arguments ('prefix', 'model_name' and optionally epoch), "
+              "but found %i" % count)
+        exit(1)
+
+
+# create namestring for saving predictions array given model name and epoch
+def predictions_npy_name(model_name, epoch):
+    return "predictions_%s%s.npy" % (model_name, (("_epoch" + str(epoch)) if epoch is not None else ""))
+
+
+def calc_groundtruth_poses_npy(dataset_root, container_name_list):
+    """Returns all groundtruth poses for the given dataset and container name list.
+    """
+    from region_ensemble.model import sample_generator as s
+    labels_63 = np.asarray(list(s(dataset_root, "pose", container_name_list)))
+    labels_21_3 = np.reshape(labels_63, [-1, 21, 3])
+    return labels_21_3
+
+
+def uvd3xyz(uvd, fx=FX_HANDS2017, fy=FY_HANDS2017, cx=CX_HANDS2017, cy=CY_HANDS2017):
+    """Convert a pose batch of dimensions (batch_size, joints, 3)
+    from uvd to xyz (mm).
+    """
+
+    uvd = np.asarray(uvd)
+    assert uvd.ndim == 3
+    assert uvd.shape[-1] == 3
+
+    f = np.asarray([1/fx, 1/fy, 1])
+    cc1 = np.asarray([-cx, -cy, 1])
+    uv0 = uvd * np.asarray([1, 1, 0])
+    d = np.expand_dims(uvd[:, :, -1], 2)
+    xyz = d * f * (uv0 + cc1)
+    return xyz
+
+
+def uvd2xyz(uvd, fx=FX_HANDS2017, fy=FY_HANDS2017, cx=CX_HANDS2017, cy=CY_HANDS2017):
+    """Convert a single pose of dimensions (joints, 3)
+    from uvd to xyz (mm)."""
+    uvd = np.asarray(uvd)
+    assert uvd.ndim == 2
+    return uvd3xyz(np.expand_dims(uvd, 0), fx=fx, fy=fy, cx=cx, cy=cy)[0]
+
+
 class ErrorCalculator:
+
+    @staticmethod
+    def reduce_xyz_norm(individual_errors):
+        return np.linalg.norm(individual_errors, axis=2)
 
     @staticmethod
     # error averaged over joints and dimensions [ variable_set_length ]
     def per_frame(individual_errors):
-        return np.mean(individual_errors, axis=(1, 2))
+        return np.mean(ErrorCalculator.reduce_xyz_norm(individual_errors), axis=1)
+
+    @staticmethod
+    # error averaged over dimensions [ variable_set length, 21 ]
+    def per_frame_and_joint(individual_errors):
+        return ErrorCalculator.reduce_xyz_norm(individual_errors)
 
     @staticmethod
     # joint and dimension error averaged over all samples [ 21, 3 ]
@@ -103,7 +173,7 @@ class ErrorCalculator:
     @staticmethod
     # joint error averaged over samples and dimensions [ 21 ]
     def per_joint(individual_errors):
-        return np.mean(individual_errors, axis=(0, 2))
+        return np.mean(ErrorCalculator.reduce_xyz_norm(individual_errors), axis=0)
 
     @staticmethod
     # dimension error averaged over samples and joints [ 3 ]
@@ -112,8 +182,13 @@ class ErrorCalculator:
 
     @staticmethod
     # overall error
-    def overall_mean_error(individual_errors):
+    def overall_mean_error_dimensions_averaged(individual_errors):
         return np.mean(individual_errors)
+
+    @staticmethod
+    # overall error
+    def overall_mean_error_euclidean(individual_errors):
+        return np.mean(ErrorCalculator.reduce_xyz_norm(individual_errors))
 
 
 class TQDMHelper:
