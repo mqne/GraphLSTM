@@ -23,7 +23,7 @@ import os
 
 # dataset path declarations
 
-prefix = "train-mhp-regen01"
+prefix = "train-mhp-regen02"
 checkpoint_dir = r"/home/matthias-k/GraphLSTM_data/%s" % prefix
 
 dataset_root = r"/home/matthias-k/datasets/hands2017/data/hand2017_nor_img_new"
@@ -36,6 +36,7 @@ test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.p
 
 # number of hypotheses produced by the extended regen network
 hypotheses_count = 5
+
 learning_rate = 1e-3
 
 model_name = "regen-nopca_MHP_%ihyps_adamlr%f" % (hypotheses_count, learning_rate)
@@ -76,6 +77,7 @@ print("Building Multiple Hypotheses stage …")
 
 groundtruth_shape = [None, 63]
 groundtruth_tensor = tf.placeholder(tf.float32, shape=groundtruth_shape)
+is_training = tf.placeholder(tf.bool)
 
 kernel_regularizer = tf.contrib.layers.l2_regularizer(re.Const.WEIGHT_DECAY)
 
@@ -85,6 +87,7 @@ mhp_layer, meta_loss = mhp.dense_mhp(mhp_input,
                                      units=63,
                                      hypotheses_count=hypotheses_count,
                                      loss_func=loss_func,
+                                     is_training=is_training,
                                      groundtruth_tensor=groundtruth_tensor,
                                      kernel_regularizer=kernel_regularizer,
                                      name="dense_%i-hypotheses_MHP_layer" % hypotheses_count)
@@ -116,7 +119,7 @@ train_step = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss)
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
     print("Created new checkpoint directory `%s`." % checkpoint_dir)
-saver = tf.train.Saver(keep_checkpoint_every_n_hours=2, filename=checkpoint_dir)
+saver = tf.train.Saver(keep_checkpoint_every_n_hours=4, filename=checkpoint_dir)
 
 # gather tensors for tensorboard
 tf.summary.scalar('loss', loss)
@@ -136,6 +139,7 @@ tf.add_to_collection(COLLECTION, groundtruth_tensor)
 tf.add_to_collection(COLLECTION, train_step)
 tf.add_to_collection(COLLECTION, loss)
 tf.add_to_collection(COLLECTION, merged)
+tf.add_to_collection(COLLECTION, is_training)
 
 t = TQDMHelper()
 
@@ -165,7 +169,8 @@ with sess.as_default():
 
             _, loss_value, summary = sess.run([train_step, loss, merged], feed_dict={input_tensor: X,
                                                                                      groundtruth_tensor: Y,
-                                                                                     K.learning_phase(): 1})
+                                                                                     K.learning_phase(): 1,
+                                                                                     is_training: True})
 
             training_summary_writer.add_summary(summary, global_step=global_step)
             global_step += 1

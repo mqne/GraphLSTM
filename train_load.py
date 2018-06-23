@@ -74,7 +74,7 @@ with sess.as_default():
     print("Restoring weights for epoch %i …" % load_epoch)
     loader.restore(sess, checkpoint_dir + "/%s-%i" % (model_name, load_epoch))
     print("Getting necessary tensors …")
-    input_tensor, output_tensor, groundtruth_tensor, train_step, loss, merged = tf.get_collection(COLLECTION)
+    input_tensor, output_tensor, groundtruth_tensor, train_step, loss, merged, is_training = tf.get_collection(COLLECTION)
     print("Creating variable saver …")
     saver = tf.train.Saver(keep_checkpoint_every_n_hours=2, filename=checkpoint_dir)
     print("Creating training summary writer …")
@@ -102,6 +102,7 @@ with sess.as_default():
 
             _, loss_value, summary = sess.run([train_step, loss, merged], feed_dict={input_tensor: X,
                                                                                      groundtruth_tensor: Y,
+                                                                                     is_training: True,
                                                                                      K.learning_phase(): 1})
 
             training_summary_writer.add_summary(summary, global_step=global_step)

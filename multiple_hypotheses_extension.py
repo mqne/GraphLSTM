@@ -1,6 +1,5 @@
 import tensorflow as tf
 from tensorflow.python.framework import tensor_shape
-import keras.backend as K
 
 # kernel_regularizer = tf.contrib.layers.l2_regularizer(re.Const.WEIGHT_DECAY)
 # loss_func = re.soft_loss
@@ -20,6 +19,9 @@ class DenseMultipleHypothesesLayer(tf.layers.Layer):
           HYPOTHESES_AXIS dimension (default: second) of output.
         loss_func: (callable) The loss function to be used in the meta loss. Will be
           called like this: loss_func(groundtruth_tensor, hypothesis_output)
+        is_training: (boolean tf tensor) Replaces K.learning_phase(). If True,
+          the meta loss will be calculated. If False, groundtruth_tensor is
+          not evaluated and can thus be set to a dummy value.
         groundtruth_tensor: (tf tensor) The tensor used for evaluating the loss.
         epsilon: (float, default: 0.05) Epsilon value used in the calculation of
           the soft Kronecker delta.
@@ -36,12 +38,13 @@ class DenseMultipleHypothesesLayer(tf.layers.Layer):
           meta_loss is the meta loss.
     """
 
-    def __init__(self, units, hypotheses_count, loss_func, groundtruth_tensor, epsilon=0.05, p_dropout=0.01,
-                 kernel_regularizer=None, name=None):
+    def __init__(self, units, hypotheses_count, loss_func, is_training, groundtruth_tensor,
+                 epsilon=0.05, p_dropout=0.01, kernel_regularizer=None, name=None):
         super().__init__(name=name)
         self._units = units
         self._hypotheses_count = hypotheses_count
         self._loss_func = loss_func
+        self._is_training = is_training
         self._groundtruth_tensor = groundtruth_tensor
         self._epsilon = epsilon
         self._p_dropout = p_dropout
@@ -82,7 +85,7 @@ class DenseMultipleHypothesesLayer(tf.layers.Layer):
 
         output = tf.stack(hyps, axis=HYPOTHESES_AXIS)
 
-        return output, tf.cond(K.learning_phase(),
+        return output, tf.cond(self._is_training,
                                true_fn=lambda: self._meta_loss(hyps),
                                false_fn=lambda: -1.)
 
@@ -150,8 +153,8 @@ class DenseMultipleHypothesesLayer(tf.layers.Layer):
             one_layer_input_shape[HYPOTHESES_AXIS:])
 
 
-def dense_mhp(inputs, units, hypotheses_count, loss_func, groundtruth_tensor, epsilon=0.05, p_dropout=0.01,
-              kernel_regularizer=None, name=None):
+def dense_mhp(inputs, units, hypotheses_count, loss_func, is_training, groundtruth_tensor,
+              epsilon=0.05, p_dropout=0.01, kernel_regularizer=None, name=None):
     """Functional interface for the densely-connected layer extended with MHP.
 
     Parameters:
@@ -161,6 +164,9 @@ def dense_mhp(inputs, units, hypotheses_count, loss_func, groundtruth_tensor, ep
           HYPOTHESES_AXIS dimension (default: second) of output.
         loss_func: (callable) The loss function to be used in the meta loss. Will be
           called like this: loss_func(groundtruth_tensor, hypothesis_output)
+        is_training: (boolean tf tensor) Replaces K.learning_phase(). If True,
+          the meta loss will be calculated. If False, groundtruth_tensor is
+          not evaluated and can thus be set to a dummy value.
         groundtruth_tensor: (tf tensor) The tensor used for evaluating the loss.
         epsilon: (float, default: 0.05) Epsilon value used in the calculation of
           the soft Kronecker delta.
@@ -178,6 +184,7 @@ def dense_mhp(inputs, units, hypotheses_count, loss_func, groundtruth_tensor, ep
     layer = DenseMultipleHypothesesLayer(units,
                                          hypotheses_count,
                                          loss_func,
+                                         is_training,
                                          groundtruth_tensor,
                                          epsilon=epsilon,
                                          p_dropout=p_dropout,
