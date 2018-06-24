@@ -149,6 +149,22 @@ def uvd2xyz(uvd, fx=FX_HANDS2017, fy=FY_HANDS2017, cx=CX_HANDS2017, cy=CY_HANDS2
     return uvd3xyz(np.expand_dims(uvd, 0), fx=fx, fy=fy, cx=cx, cy=cy)[0]
 
 
+# calculate mean and variance across all hypotheses for shape [batch_size, hypotheses, joints, dims]
+def np_mean_and_variance(prediction, hypotheses_axis=1):
+    """return signature: mean, variance (across all hypotheses; input gets reduced along dimension 1"""
+    assert np.ndim(prediction) == 4
+    return np.mean(prediction, axis=hypotheses_axis), np.var(prediction, axis=hypotheses_axis)
+
+
+def confidence_dict_for_index_order(index_list, index_dict=HAND_GRAPH_HANDS2017_INDEX_DICT):
+    """Creates a confidence dict for update order as given by index_list"""
+    # invert dict
+    index_node_dict = {index: node for node, index in index_dict.items()}
+    # assign each node a confidence equivalent to minus its position in the index list
+    confidence_dict = {index_node_dict[index_list[i]]: -i for i in range(len(index_list))}
+    return confidence_dict
+
+
 class ErrorCalculator:
 
     @staticmethod
@@ -167,7 +183,7 @@ class ErrorCalculator:
 
     @staticmethod
     # joint and dimension error averaged over all samples [ 21, 3 ]
-    def per_joint_dim(individual_errors):
+    def per_joint_and_dim(individual_errors):
         return np.mean(individual_errors, axis=0)
 
     @staticmethod
@@ -187,7 +203,7 @@ class ErrorCalculator:
 
     @staticmethod
     # overall error
-    def overall_mean_error_euclidean(individual_errors):
+    def overall_mean_error(individual_errors):
         return np.mean(ErrorCalculator.reduce_xyz_norm(individual_errors))
 
 

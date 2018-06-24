@@ -1,5 +1,6 @@
 import graph_lstm as glstm
 import region_ensemble.model as re
+import multiple_hypotheses_extension as mhp
 from helpers import *
 
 import tensorflow as tf
@@ -23,7 +24,6 @@ prefix, model_name, epoch = get_prefix_model_name_optionally_epoch()
 
 # dataset path declarations
 
-# prefix = "train-03"
 checkpoint_dir = r"/home/matthias-k/GraphLSTM_data/%s" % prefix
 
 dataset_root = r"/home/matthias-k/datasets/hands2017/data/hand2017_nor_img_new"
@@ -37,9 +37,6 @@ test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.p
 # number of timesteps to be simulated (each step, the same data is fed)
 graphlstm_timesteps = 2
 learning_rate = 1e-3
-
-#model_name = "regen41_graphlstm1t%i_outputscaling21x3wb_adamlr%f" % (graphlstm_timesteps, learning_rate)
-# model_name = "regen41_graphlstm1t%i_fcrelu4d4d1_adamlr%f_withtensorboardgs" % (graphlstm_timesteps, learning_rate)
 
 checkpoint_dir += r"/%s" % model_name
 tensorboard_dir = checkpoint_dir + r"/tensorboard/validation"
@@ -87,7 +84,7 @@ with sess.as_default():
         loader.restore(sess, checkpoint_dir + "/%s-%i" % (model_name, epoch))
 
     print("Getting necessary tensors …")
-    input_tensor, output_tensor, groundtruth_tensor, train_step, loss, merged = tf.get_collection(COLLECTION)
+    input_tensor, output_tensor, groundtruth_tensor, train_step, loss, merged, is_training = tf.get_collection(COLLECTION)
 
     validate_image_batch_gen = re.image_batch_generator_one_epoch(dataset_root,
                                                                   validate_list,
@@ -105,14 +102,14 @@ with sess.as_default():
 
         batch_predictions, summary = sess.run([output_tensor, merged], feed_dict={input_tensor: X,
                                                                                   groundtruth_tensor: Y_dummy,
-                                                                                  K.learning_phase(): 0})
+                                                                                  K.learning_phase(): 0,
+                                                                                  is_training: False})
         if predictions is not None:
             predictions = np.concatenate((predictions, batch_predictions))
         else:
             predictions = batch_predictions
         validation_summary_writer.add_summary(summary, global_step=global_step)
         global_step += 1
-        # todo: pass K.learning_phase(): 1 to feed_dict (for testing: 0)
 
 # # STORE PREDICTION RESULTS
 
@@ -134,20 +131,22 @@ validate_label = np.asarray(list(validate_label_gen))
 # reshape from [set_size, 63] to [set_size, 21, 3]
 validate_label = np.reshape(validate_label, [-1, *output_shape[-2:]])
 
+predictions_mean, _ = np_mean_and_variance(predictions)
+
 # each individual error [ validate_set_length, 21, 3 ]
-individual_error = np.abs(validate_label - predictions)
+individual_error = np.abs(validate_label - predictions_mean)
 
 # overall error
 overall_mean_error = ErrorCalculator.overall_mean_error(individual_error)
 
-np.save(tensorboard_dir + "/individual_error_%s%s.npy" % (model_name,
-                                                          (("_epoch" + str(epoch)) if epoch is not None else "")),
-        individual_error)
+# np.save(tensorboard_dir + "/individual_error_%s%s.npy" % (model_name,
+#                                                           (("_epoch" + str(epoch)) if epoch is not None else "")),
+#         individual_error)
 
 print("\n# %s" % epoch_str)
-print("Mean prediction error (euclidean):", overall_mean_error)  # todo which unit is this in?
+print("Mean mean prediction error (euclidean):", overall_mean_error)  # todo which unit is this in?
 
-pred_joint_avg = np.mean(predictions, axis=0)
+pred_joint_avg = np.mean(predictions_mean, axis=0)
 actual_joint_avg = np.mean(validate_label, axis=0)
 
 print("Actual joints position average:\n%r" % actual_joint_avg)
