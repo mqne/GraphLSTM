@@ -116,6 +116,8 @@ with sess.as_default():
 
 # # STORE PREDICTION RESULTS
 
+# todo convert UVD to XYZ
+
 npyname = predictions_npy_name(model_name, epoch)
 print("Storing prediction results at %s …" % npyname)
 
@@ -140,9 +142,9 @@ individual_error = np.abs(validate_label - predictions)
 # overall error
 overall_mean_error = ErrorCalculator.overall_mean_error(individual_error)
 
-np.save(tensorboard_dir + "/individual_error_%s%s.npy" % (model_name,
-                                                          (("_epoch" + str(epoch)) if epoch is not None else "")),
-        individual_error)
+# np.save(tensorboard_dir + "/individual_error_%s%s.npy" % (model_name,
+#                                                           (("_epoch" + str(epoch)) if epoch is not None else "")),
+#         individual_error)
 
 print("\n# %s" % epoch_str)
 print("Mean prediction error (euclidean):", overall_mean_error)  # todo which unit is this in?

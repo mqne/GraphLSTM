@@ -1,20 +1,23 @@
 from helpers import *
-
-import numpy as np
-
 import plot_helper
 
+import numpy as np
+from matplotlib import pyplot as plt
+
+from datetime import datetime
+import os
+
+plt.switch_backend('agg')
 
 # prefix, model_name, epoch = get_prefix_model_name_optionally_epoch()
 
 # syntax of file: each line containing one file.npy - label pair, separated by ','
-file_with_npy_paths = get_from_commandline_args(1, "path to text file containing .npy filenames")
+file_with_npy_paths = get_from_commandline_args(1, "path to text file containing .npy filenames")[0]
 
 
 # dataset path declarations
 
-groundtruth_npy_location = r"/home/matthias-k/GraphLSTM_data/validate_split0.8_groundtruth.npy"
-server = True
+groundtruth_npy_location = r"/home/matthias/validate_split0.8_groundtruth.npy"
 
 # checkpoint_dir = r"/home/matthias-k/GraphLSTM_data/%s" % prefix
 
@@ -42,9 +45,16 @@ def clean_read_names_and_labels_from_file(path):
     if len(lines) == 0:
         raise LookupError("File seems to contain no entries.")
     combined_list = list(filter(lambda item: item.strip(), lines))
-    combined_list = [s.split(',') for s in combined_list]
+    combined_list = [s.split(',') for s in combined_list if not s.startswith(('#',))]
+    if len(combined_list) == 0:
+        raise LookupError("File seems to contain no entries.")
     names, labels = zip(*combined_list)
     return tuple([s.strip() for s in names]), tuple([s.strip() for s in labels])
+
+
+save_path = datetime.utcnow().strftime("analysis_%y%m%d-%H%M%S/")
+if not os.path.exists(save_path):
+    os.makedirs(save_path)
 
 
 # # LOAD PREDICTIONS
@@ -113,31 +123,33 @@ if is_mhp == 4:
 
 else:
 
+    # each individual error [ validate_set_length, 21, 3 ]
     individual_errors_list = [np.abs(predictions - groundtruth) for predictions in predictions_list]
 
-# todo continue ...
+    # hands2017 error measure 1
+    mean_errors = [ErrorCalculator.overall_mean_error(x) for x in individual_errors_list]
+    print("\nMean overall error:")
+    for label, mean_error in zip(npy_labels, mean_errors):
+        print(str(mean_error) + "\t" + label)
 
+    print("\nCreating plots …")
+    # hands2017 error measure 2
+    plot_helper.plot_ratio_of_joints_within_bound(individual_errors_list,
+                                                  legend=npy_labels,
+                                                  savepath=save_path+"measure2")
 
-# each individual error [ validate_set_length, 21, 3 ]
-individual_error = np.abs(validate_label - predictions_mean)
+    # hands2017 error measure 3
+    plot_helper.plot_ratio_of_frames_with_all_joints_within_bound(individual_errors_list,
+                                                                  legend=npy_labels,
+                                                                  savepath=save_path+"measure3")
 
-# overall error
-overall_mean_error = ErrorCalculator.overall_mean_error(individual_error)
+    if len(npy_names) == 1:
+        plot_helper.violinplot_error_per_joint(individual_errors_list[0],
+                                               group_by_joint_type=True,
+                                               max_err=10,
+                                               savepath=save_path+"joint_violin_"+os.path.basename(npy_names[0]))
 
-# np.save(tensorboard_dir + "/individual_error_%s%s.npy" % (model_name,
-#                                                           (("_epoch" + str(epoch)) if epoch is not None else "")),
-#         individual_error)
+    print("Plots stored at %s." % save_path)
 
-print("\n# %s" % epoch_str)
-print("Mean mean prediction error (euclidean):", overall_mean_error)  # todo which unit is this in?
-
-pred_joint_avg = np.mean(predictions_mean, axis=0)
-actual_joint_avg = np.mean(validate_label, axis=0)
-
-print("Actual joints position average:\n%r" % actual_joint_avg)
-print("Predicted joints position average:\n%r" % pred_joint_avg)
-
-print("Validation done.")
-print("Point tensorboard to %s to get more insights. This directory also holds the .npy files for error analysis."
-      % tensorboard_dir)
+print("Done.")
 exit(0)

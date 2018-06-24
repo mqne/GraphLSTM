@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from helpers import ErrorCalculator as Ec
+from helpers import HAND_GRAPH_HANDS2017_INDEX_DICT, reverse_dict
 
 
 # Define TUM corporate design colors
@@ -8,7 +9,13 @@ from helpers import ErrorCalculator as Ec
 class TumColours:
     Blue = '#0065BD'
     SecondaryBlue = '#005293'
+    SecondaryBlue_20 = '#ccdce9'
+    SecondaryBlue_50 = '#7fa8c9'
+    SecondaryBlue_80 = '#3375a9'
     SecondaryBlue2 = '#003359'
+    SecondaryBlue2_20 = '#ccd6de'
+    SecondaryBlue2_50 = '#7f99ac'
+    SecondaryBlue2_80 = '#335c7a'
     Black = '#000000'
     White = '#FFFFFF'
     DarkGray = '#333333'
@@ -147,6 +154,72 @@ def plot_ratio_of_frames_with_all_joints_within_bound(individual_errors, xlabel=
                         max_err=max_err,
                         fontsize=fontsize,
                         colours=colours)
+
+
+joint_pos_group_by_type = {'Wrist': 1,
+                           'TMCP': 3, 'IMCP': 4, 'MMCP': 5, 'RMCP': 6, 'PMCP': 7,
+                           'TPIP': 9, 'IPIP': 10, 'MPIP': 11, 'RPIP': 12, 'PPIP': 13,
+                           'TDIP': 15, 'IDIP': 16, 'MDIP': 17, 'RDIP': 18, 'PDIP': 19,
+                           'TTIP': 21, 'ITIP': 22, 'MTIP': 23, 'RTIP': 24, 'PTIP': 25,
+                           }
+
+joint_pos_group_by_finger = {"Wrist": 1,
+                             "TMCP": 3, "IMCP": 8, "MMCP": 13, "RMCP": 18, "PMCP": 23,
+                             "TPIP": 4, "TDIP": 5, "TTIP": 6,
+                             "IPIP": 9, "IDIP": 10, "ITIP": 11,
+                             "MPIP": 14, "MDIP": 15, "MTIP": 16,
+                             "RPIP": 19, "RDIP": 20, "RTIP": 21,
+                             "PPIP": 24, "PDIP": 25, "PTIP": 26}
+
+
+def violinplot_error_per_joint(individual_errors,
+                               index_dict=HAND_GRAPH_HANDS2017_INDEX_DICT,
+                               group_by_joint_type=None,
+                               ylabel='Error in mm',
+                               max_err=20,
+                               savepath=None,
+                               figsize=(8, 3),
+                               fontsize=10):
+    errors_per_joint = Ec.reduce_xyz_norm(individual_errors)
+    node_dict = reverse_dict(index_dict)
+    labels = [node_dict[i] for i in range(len(index_dict))]
+
+    # For grouping, other joint constellations than hands2017 are not supported in this implementation
+    if group_by_joint_type is not None:
+        if index_dict != HAND_GRAPH_HANDS2017_INDEX_DICT:
+            raise NotImplementedError("Grouped violin plot is only implemented for hands2017-style indices")
+        if group_by_joint_type:
+            pos_dict = joint_pos_group_by_type
+        else:
+            pos_dict = joint_pos_group_by_finger
+        pos = [pos_dict[node_dict[i]] for i in range(len(node_dict))]
+    else:
+        pos = np.arange(1, len(labels) + 1)
+
+    plt.rc('font', size=fontsize)
+    plt.figure(num=None, figsize=figsize)
+    sp = plt.subplot()
+
+    vp = plt.violinplot(errors_per_joint, pos, showmeans=True, showextrema=False, points=1000)
+    for p in vp['bodies']:
+        p.set_facecolor(TumColours.SecondaryBlue2_20)
+        p.set_alpha(1)
+    vp['cmeans'].set_color(TumColours.SecondaryBlue)
+    vp['cmeans'].set_alpha(1)
+
+    sp.set_xticks(pos)
+    sp.set_xticklabels(labels, rotation=45)
+
+    plt.ylim(0, max_err)
+    plt.ylabel(ylabel)
+
+    if savepath is not None:
+        plt.savefig(savepath + ".pgf")
+        plt.savefig(savepath + ".pdf")
+    else:
+        plt.show()
+    plt.close()
+    plt.rc('font', size=plt.rcParamsDefault['font.size'])
 
 
 def make_tuple(o):

@@ -124,7 +124,7 @@ def sample_generator(dataset_root, container_dir, container_name_list, resize_to
                          container_name_list)
     it = enumerate(container_list)
     if progress_desc is not None:
-        it = tqdm(it, total=len(container_name_list), desc=progress_desc, leave=leave)
+        it = tqdm(it, total=len(container_name_list), desc=progress_desc, leave=leave, dynamic_ncols=True)
     for i, container in it:
         #         p.update(i)  # DEBUG: ProgressBar
         sample_seq = pd.read_pickle(container, compression='gzip')

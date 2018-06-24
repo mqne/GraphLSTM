@@ -159,10 +159,14 @@ def np_mean_and_variance(prediction, hypotheses_axis=1):
 def confidence_dict_for_index_order(index_list, index_dict=HAND_GRAPH_HANDS2017_INDEX_DICT):
     """Creates a confidence dict for update order as given by index_list"""
     # invert dict
-    index_node_dict = {index: node for node, index in index_dict.items()}
+    index_node_dict = reverse_dict(index_dict)
     # assign each node a confidence equivalent to minus its position in the index list
     confidence_dict = {index_node_dict[index_list[i]]: -i for i in range(len(index_list))}
     return confidence_dict
+
+
+def reverse_dict(dictionary):
+    return {key: value for value, key in dictionary.items()}
 
 
 class ErrorCalculator:
