@@ -780,11 +780,11 @@ def uvd2xyz(uvd):
 
 def transform(pose_coor, paras):
     pose_coor = np.array(pose_coor).reshape([21, 3])  # estimation coordinates
-    img_min_coor = paras[0]  # paras are read from tran_para_img.pkl
-    coor_tran = paras[1]
-    img_min = paras[2]
-    window1 = paras[3]
-    scale = paras[4]
+    img_min_coor = paras[0]  # 2 elements  # paras are read from tran_para_img.pkl
+    coor_tran = paras[1]  # 2 elements
+    img_min = paras[2]  # scalar
+    window1 = paras[3]  # 4 elements
+    scale = paras[4]  # scalar
 
     pose_coor[:, [0, 1]] = pose_coor[:, [1, 0]]
     tran_v = pose_coor[:, :2] - coor_tran

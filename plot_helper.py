@@ -36,6 +36,7 @@ PlotColours = {
     4: TumColours.Gray,
 }
 
+
 def set_thesis_style():
     plt.rc('text', usetex=True)
     plt.rc('text.latex', preamble=r'\usepackage[T1]{fontenc}'
@@ -83,6 +84,8 @@ def plot_accuracy_curve(individual_errors, xlabel, ylabel, legend=None, savepath
 
     for err, colour in zip(individual_errors, colours):
         sorted_errors = np.sort(err)
+        # prevent memory exhaustion
+        sorted_errors = sorted_errors[::len(sorted_errors) // 10000 + 1]
         y = np.linspace(0, 100, len(sorted_errors) + 1)
         x = np.append(sorted_errors, sorted_errors[-1])
         plt.step(x, y, color=colour)
@@ -99,6 +102,7 @@ def plot_accuracy_curve(individual_errors, xlabel, ylabel, legend=None, savepath
     if savepath is not None:
         plt.savefig(savepath + ".pgf")
         plt.savefig(savepath + ".pdf")
+        plt.savefig(savepath + ".png", dpi=300)
     else:
         plt.show()
     plt.close()
@@ -111,7 +115,7 @@ def plot_average_frame_error(errors, xlabel=r'Average Joint Error (mm)', ylabel=
                              legend=None,
                              savepath=None, figsize=(5, 3), max_err=40, fontsize=10,
                              colours=None):
-    plot_accuracy_curve([Ec.per_frame(x) for x in make_tuple(errors)],
+    plot_accuracy_curve([Ec.per_frame(x) for x in errors],
                         xlabel=xlabel,
                         ylabel=ylabel,
                         legend=legend,
@@ -127,7 +131,7 @@ def plot_ratio_of_joints_within_bound(individual_errors, xlabel=r'Joint Error (m
                                       legend=None,
                                       savepath=None, figsize=(5, 3), max_err=40, fontsize=10,
                                       colours=None):
-    plot_accuracy_curve([Ec.per_frame_and_joint(x).flatten() for x in make_tuple(individual_errors)],
+    plot_accuracy_curve([Ec.per_frame_and_joint(x).flatten() for x in individual_errors],
                         xlabel=xlabel,
                         ylabel=ylabel,
                         legend=legend,
@@ -145,7 +149,7 @@ def plot_ratio_of_frames_with_all_joints_within_bound(individual_errors, xlabel=
                                                       max_err=40,
                                                       fontsize=10,
                                                       colours=None):
-    plot_accuracy_curve([np.amax(Ec.per_frame_and_joint(x), axis=1) for x in make_tuple(individual_errors)],
+    plot_accuracy_curve([np.amax(Ec.per_frame_and_joint(x), axis=1) for x in individual_errors],
                         xlabel=xlabel,
                         ylabel=ylabel,
                         legend=legend,

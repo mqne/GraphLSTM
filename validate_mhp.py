@@ -98,7 +98,7 @@ with sess.as_default():
         actual_batch_size = X.shape[0]
         X = X.reshape([actual_batch_size, *input_shape[1:]])
         # Y = Y.reshape([actual_batch_size, *output_shape[1:]])
-        Y_dummy = np.zeros([actual_batch_size, 21, 3])  # necessary as the restored "merged" tensor computes the loss
+        Y_dummy = np.zeros([actual_batch_size, 63])  # necessary as the restored "merged" tensor computes the loss
 
         batch_predictions, summary = sess.run([output_tensor, merged], feed_dict={input_tensor: X,
                                                                                   groundtruth_tensor: Y_dummy,

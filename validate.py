@@ -116,7 +116,7 @@ with sess.as_default():
 
 # # STORE PREDICTION RESULTS
 
-# todo convert UVD to XYZ
+# results are in mm in every dimension
 
 npyname = predictions_npy_name(model_name, epoch)
 print("Storing prediction results at %s …" % npyname)
