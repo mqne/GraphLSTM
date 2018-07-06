@@ -465,7 +465,7 @@ class RegEnModel(Model):
                                padding='same'
                                )(com)
 
-            # Here we got 12x12x64 features
+            # Here we got 8x8x256 features
 
             def segment_features(feat):
                 """

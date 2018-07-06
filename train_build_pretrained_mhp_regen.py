@@ -5,35 +5,33 @@ from helpers import *
 
 import tensorflow as tf
 import keras.backend as K
-from keras.optimizers import Adam
-from keras.utils import plot_model
-from keras.callbacks import ModelCheckpoint, TensorBoard
 
 import numpy as np
-import seaborn as sns
 import zipfile
 
 from tqdm import tqdm
 import os
 
 
-# set plot style
-# sns.set_style("whitegrid")
-
-
 # pretrained model paths
 
-load_epoch = 36  # todo adapt
-hypotheses_count = 5
+load_epoch = 92  # todo adapt
+hypotheses_count = 2
 
 # todo: put confidence values here
-glstm_confidence_dict = {"Wrist": 0,
-                         "TMCP": 1, "IMCP": 2, "MMCP": 3, "RMCP": 4, "PMCP": 5,
-                         "TPIP": 6, "TDIP": 7, "TTIP": 8,
-                         "IPIP": 9, "IDIP": 10, "ITIP": 11,
-                         "MPIP": 12, "MDIP": 13, "MTIP": 14,
-                         "RPIP": 15, "RDIP": 16, "RTIP": 17,
-                         "PPIP": 18, "PDIP": 19, "PTIP": 20}
+# glstm_confidence_dict = {"Wrist": 0,
+#                          "TMCP": 1, "IMCP": 2, "MMCP": 3, "RMCP": 4, "PMCP": 5,
+#                          "TPIP": 6, "TDIP": 7, "TTIP": 8,
+#                          "IPIP": 9, "IDIP": 10, "ITIP": 11,
+#                          "MPIP": 12, "MDIP": 13, "MTIP": 14,
+#                          "RPIP": 15, "RDIP": 16, "RTIP": 17,
+#                          "PPIP": 18, "PDIP": 19, "PTIP": 20}
+
+# index update order, created by analysis.py of RegEn MHP 2 hypotheses model at epoch 92
+index_order_confidence_regen_mhp2 = [3, 5, 4, 15, 16, 12, 13, 9, 2, 6, 1, 7, 0, 10, 18, 14, 17, 19, 11, 8, 20]
+# reverse for performance evaluation
+# index_order_confidence_regen_mhp2.reverse()
+glstm_confidence_dict = confidence_dict_for_index_order(index_order_confidence_regen_mhp2)
 
 pretrained_prefix = "train-mhp-regen02"
 pretrained_model_name = "regen-nopca_MHP_%ihyps_adamlr0.001000" % hypotheses_count
@@ -41,7 +39,7 @@ pretrained_model_name = "regen-nopca_MHP_%ihyps_adamlr0.001000" % hypotheses_cou
 
 # dataset path declarations
 
-prefix = "train-pr-mhp-regen02-g"
+prefix = "train-pr-mhp-regen02-g-timesteps"
 checkpoint_dir = r"/home/matthias-k/GraphLSTM_data/%s" % prefix
 
 # checkpoint dir of the pretrained model
@@ -57,11 +55,11 @@ testset_root = r"/data2/datasets/hands2017/data/hand2017_test_0914"
 test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.pkl"]
 
 # number of timesteps to be simulated (each step, the same data is fed)
-graphlstm_timesteps = 2
+graphlstm_timesteps = 1
 learning_rate = 1e-3
 
-model_name = "regen41_pretrained_epoch%i_lrx0.1_graphlstm1bf1t%i_rescon_adamlr%f" % \
-             (load_epoch, graphlstm_timesteps, learning_rate)
+model_name = "regen_MHP%ihyps_pretrained_epoch%i_lrx0.1_graphlstmt%i_updateorder-mhp2conf_rescon_adamlr%f" % \
+             (hypotheses_count, load_epoch, graphlstm_timesteps, learning_rate)
 
 checkpoint_dir += r"/%s" % model_name
 tensorboard_dir = checkpoint_dir + r"/tensorboard"
@@ -179,7 +177,7 @@ train_step = tf.train.AdamOptimizer(learning_rate=learning_rate, name="Adam_%s" 
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
     print("Created new checkpoint directory `%s`." % checkpoint_dir)
-saver = tf.train.Saver(keep_checkpoint_every_n_hours=2, filename=checkpoint_dir)
+saver = tf.train.Saver(keep_checkpoint_every_n_hours=1, filename=checkpoint_dir)
 
 # gather tensors for tensorboard
 s_loss = tf.summary.scalar('loss', loss)
@@ -240,7 +238,7 @@ with sess.as_default():
             # todo: pass K.learning_phase(): 1 to feed_dict (for testing: 0)
         t.stop()
         print("Training loss after epoch %i: %f" % (epoch, loss_value))
-        if epoch % 2 == 0:
+        if epoch < 5 or epoch % 5 == 0:
             saver.save(sess, save_path=checkpoint_dir + "/%s" % model_name, global_step=epoch)
 
 print("Training done, exiting.")

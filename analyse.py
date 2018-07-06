@@ -306,9 +306,11 @@ else:
     analyse_regular(individual_errors_list, npy_labels)
 
     if len(npy_names) == 1:
+        # y maximum: 2*max_err, rounded up to next 5mm increment
+        max_avg_joint_err = np.max(ErrorCalculator.per_joint(individual_errors_list[0]))
         plot_helper.violinplot_error_per_joint(individual_errors_list[0],
                                                group_by_joint_type=True,
-                                               max_err=10,
+                                               max_err=((max_avg_joint_err*2)//5+1)*5,
                                                savepath=save_path + "joint_violin_" + os.path.basename(npy_names[0]))
 
 print("\nPlots stored at %s." % save_path)

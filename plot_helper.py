@@ -220,6 +220,7 @@ def violinplot_error_per_joint(individual_errors,
     if savepath is not None:
         plt.savefig(savepath + ".pgf")
         plt.savefig(savepath + ".pdf")
+        plt.savefig(savepath + ".png", dpi=300)
     else:
         plt.show()
     plt.close()
