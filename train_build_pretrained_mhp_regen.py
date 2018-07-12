@@ -29,9 +29,12 @@ hypotheses_count = 2
 
 # index update order, created by analysis.py of RegEn MHP 2 hypotheses model at epoch 92
 index_order_confidence_regen_mhp2 = [3, 5, 4, 15, 16, 12, 13, 9, 2, 6, 1, 7, 0, 10, 18, 14, 17, 19, 11, 8, 20]
+index_order_wrist_first = [0, 1, 2, 3, 4, 5, 6, 9, 12, 15, 18, 7, 10, 13, 16, 19, 8, 11, 14, 17, 20]
+index_order_tips_first = list(reversed(index_order_wrist_first))
 # reverse for performance evaluation
 # index_order_confidence_regen_mhp2.reverse()
-glstm_confidence_dict = confidence_dict_for_index_order(index_order_confidence_regen_mhp2)
+
+glstm_confidence_dict = confidence_dict_for_index_order(index_order_tips_first)
 
 pretrained_prefix = "train-mhp-regen02"
 pretrained_model_name = "regen-nopca_MHP_%ihyps_adamlr0.001000" % hypotheses_count
@@ -39,7 +42,7 @@ pretrained_model_name = "regen-nopca_MHP_%ihyps_adamlr0.001000" % hypotheses_cou
 
 # dataset path declarations
 
-prefix = "train-pr-mhp-regen02-g-timesteps"
+prefix = "train-pr-mhp-regen02-g"
 checkpoint_dir = r"/home/matthias-k/GraphLSTM_data/%s" % prefix
 
 # checkpoint dir of the pretrained model
@@ -55,10 +58,10 @@ testset_root = r"/data2/datasets/hands2017/data/hand2017_test_0914"
 test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.pkl"]
 
 # number of timesteps to be simulated (each step, the same data is fed)
-graphlstm_timesteps = 1
+graphlstm_timesteps = 2
 learning_rate = 1e-3
 
-model_name = "regen_MHP%ihyps_pretrained_epoch%i_lrx0.1_graphlstmt%i_updateorder-mhp2conf_rescon_adamlr%f" % \
+model_name = "regen_MHP%ihyps_pretrained_epoch%i_lrx0.1_graphlstmt%i_updateorder-tipsfirst_rescon_adamlr%f" % \
              (hypotheses_count, load_epoch, graphlstm_timesteps, learning_rate)
 
 checkpoint_dir += r"/%s" % model_name
@@ -242,6 +245,7 @@ with sess.as_default():
             saver.save(sess, save_path=checkpoint_dir + "/%s" % model_name, global_step=epoch)
 
 print("Training done, exiting.")
+print("For analysis, run: python analysis.py %s %s" % (prefix, model_name))
 exit(0)
 
 train_batch_gen = re.pair_batch_generator(dataset_root, train_list, re.Const.TRAIN_BATCH_SIZE, shuffle=True, augmented=True)

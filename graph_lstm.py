@@ -657,6 +657,8 @@ class GraphLSTMNet(RNNCell):
             deprecated.
           shared_weights: A list of the weights that will be shared between all cells.
             Default: ALL_SHARED.
+          name (string): The Tensorflow name of the Graph LSTM network. Must be given
+            if more than one is used.
 
         Raises:
           ValueError: If nxgraph is not valid, or at least one of the cells
