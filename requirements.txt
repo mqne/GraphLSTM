@@ -4,21 +4,19 @@ tensorflow>=1.8
 # required for unittests
 numpy
 
-# required when plotting the GraphLSTM graph
+# required when plotting analysis curves or the GraphLSTM graph
 matplotlib
-
-# not necessary, but needed for networkx conversion tests (will result in ImportWarning):
-pandas
-scipy
 
 # necessary for region-ensemble
 keras
-seaborn
+scipy
+pandas
+# seaborn  # not needed in current implementation
 plotly
-h5py
+# h5py  # not needed in TensorFlow implementation
 scikit-learn
 tqdm
-pydot
+pydot  # visualizing networkx graphs
 pillow
 
 # additionally, the package 'opencv3' needs to be installed manually via 

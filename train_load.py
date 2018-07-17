@@ -76,7 +76,7 @@ with sess.as_default():
     print("Getting necessary tensors …")
     input_tensor, output_tensor, groundtruth_tensor, train_step, loss, merged, is_training = tf.get_collection(COLLECTION)
     print("Creating variable saver …")
-    saver = tf.train.Saver(keep_checkpoint_every_n_hours=2, filename=checkpoint_dir)
+    saver = tf.train.Saver(keep_checkpoint_every_n_hours=1, filename=checkpoint_dir)
     print("Creating training summary writer …")
     training_summary_writer = tf.summary.FileWriter(tensorboard_dir, sess.graph)
     print("Resuming training.")
@@ -86,7 +86,7 @@ with sess.as_default():
     batches_per_epoch_split80 = 2992
     global_step = batches_per_epoch_split80 * load_epoch
 
-    for epoch in range(load_epoch + 1, max_epoch):
+    for epoch in range(load_epoch + 1, max_epoch + 1):
         t.start()
         training_sample_generator = re.pair_batch_generator_one_epoch(dataset_root, train_list,
                                                                       re.Const.TRAIN_BATCH_SIZE,
@@ -112,7 +112,7 @@ with sess.as_default():
             # todo: pass K.learning_phase(): 1 to feed_dict (for testing: 0)
         t.stop()
         print("Training loss after epoch %i: %f" % (epoch, loss_value))
-        if epoch % 2 == 0:
+        if epoch < 5 or epoch % 5 == 0:
             saver.save(sess, save_path=checkpoint_dir + "/%s" % model_name, global_step=epoch)
 
 print("Training done, exiting.")
