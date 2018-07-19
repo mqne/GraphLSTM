@@ -24,7 +24,7 @@ import os
 
 pretrained_prefix = "train-r01"
 pretrained_model_name = "regen41_adamlr0.001000"
-load_epoch = 90  # todo adapt
+load_epoch = 35  # todo adapt
 
 
 # dataset path declarations
@@ -48,7 +48,7 @@ test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.p
 graphlstm_timesteps = 2
 learning_rate = 1e-3
 
-model_name = "regen41_pretrained_epoch%i_lrx0.1_graphlstm1bf1t%i_rescon_adamlr%f" % \
+model_name = "regen_SHP_pretrained_epoch%i_lrx0.1_graphlstmt%i_NEIGHBOUR_CONNECTIONS_SHARED_rescon_adamlr%f" % \
              (load_epoch, graphlstm_timesteps, learning_rate)
 
 checkpoint_dir += r"/%s" % model_name
@@ -158,7 +158,7 @@ train_step = tf.train.AdamOptimizer(learning_rate=learning_rate, name="Adam_%s" 
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
     print("Created new checkpoint directory `%s`." % checkpoint_dir)
-saver = tf.train.Saver(keep_checkpoint_every_n_hours=2, filename=checkpoint_dir)
+saver = tf.train.Saver(keep_checkpoint_every_n_hours=0.1, filename=checkpoint_dir)
 
 # gather tensors for tensorboard
 s_loss = tf.summary.scalar('loss', loss)
@@ -221,6 +221,7 @@ with sess.as_default():
             saver.save(sess, save_path=checkpoint_dir + "/%s" % model_name, global_step=epoch)
 
 print("Training done, exiting.")
+print("For validation, run: python validate.py %s %s" % (prefix, model_name))
 exit(0)
 
 train_batch_gen = re.pair_batch_generator(dataset_root, train_list, re.Const.TRAIN_BATCH_SIZE, shuffle=True, augmented=True)

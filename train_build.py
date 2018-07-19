@@ -169,7 +169,7 @@ train_step = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss)
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
     print("Created new checkpoint directory `%s`." % checkpoint_dir)
-saver = tf.train.Saver(keep_checkpoint_every_n_hours=2, filename=checkpoint_dir)
+saver = tf.train.Saver(keep_checkpoint_every_n_hours=0.1, filename=checkpoint_dir)
 
 # gather tensors for tensorboard
 tf.summary.scalar('loss', loss)
@@ -227,10 +227,11 @@ with sess.as_default():
             # todo: pass K.learning_phase(): 1 to feed_dict (for testing: 0)
         t.stop()
         print("Training loss after epoch %i: %f" % (epoch, loss_value))
-        if epoch % 2 == 0:
+        if epoch < 5 or epoch % 5 == 0:
             saver.save(sess, save_path=checkpoint_dir + "/%s" % model_name, global_step=epoch)
 
 print("Training done, exiting.")
+print("For validation, run: python validate.py %s %s" % (prefix, model_name))
 exit(0)
 
 train_batch_gen = re.pair_batch_generator(dataset_root, train_list, re.Const.TRAIN_BATCH_SIZE, shuffle=True, augmented=True)

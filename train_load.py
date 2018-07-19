@@ -116,4 +116,5 @@ with sess.as_default():
             saver.save(sess, save_path=checkpoint_dir + "/%s" % model_name, global_step=epoch)
 
 print("Training done, exiting.")
+print("For validation, run: python validate.py %s %s" % (prefix, model_name))
 exit(0)

@@ -87,7 +87,15 @@ with sess.as_default():
         loader.restore(sess, checkpoint_dir + "/%s-%i" % (model_name, epoch))
 
     print("Getting necessary tensors …")
-    input_tensor, output_tensor, groundtruth_tensor, train_step, loss, merged = tf.get_collection(COLLECTION)
+    collection = tf.get_collection(COLLECTION)
+    if len(collection) == 6:
+        input_tensor, output_tensor, groundtruth_tensor, train_step, loss, merged = collection
+        is_training = tf.placeholder(tf.bool)
+    elif len(collection) == 7:
+        input_tensor, output_tensor, groundtruth_tensor, train_step, loss, merged, is_training = collection
+    else:
+        raise ValueError("Expected 6 or 7 tensors in tf.get_collection(COLLECTION), but found %i:\n%r"
+                         % (len(collection), collection))
 
     validate_image_batch_gen = re.image_batch_generator_one_epoch(dataset_root,
                                                                   validate_list,
@@ -105,14 +113,14 @@ with sess.as_default():
 
         batch_predictions, summary = sess.run([output_tensor, merged], feed_dict={input_tensor: X,
                                                                                   groundtruth_tensor: Y_dummy,
-                                                                                  K.learning_phase(): 0})
+                                                                                  K.learning_phase(): 0,
+                                                                                  is_training: False})
         if predictions is not None:
             predictions = np.concatenate((predictions, batch_predictions))
         else:
             predictions = batch_predictions
         validation_summary_writer.add_summary(summary, global_step=global_step)
         global_step += 1
-        # todo: pass K.learning_phase(): 1 to feed_dict (for testing: 0)
 
 # # STORE PREDICTION RESULTS
 
@@ -147,7 +155,7 @@ overall_mean_error = ErrorCalculator.overall_mean_error(individual_error)
 #         individual_error)
 
 print("\n# %s" % epoch_str)
-print("Mean prediction error (euclidean):", overall_mean_error)  # todo which unit is this in?
+print("Mean prediction error (euclidean):", overall_mean_error)
 
 pred_joint_avg = np.mean(predictions, axis=0)
 actual_joint_avg = np.mean(validate_label, axis=0)

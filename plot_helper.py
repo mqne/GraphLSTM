@@ -34,6 +34,7 @@ PlotColours = {
     5: TumColours.SecondaryBlue2,
     2: TumColours.AccentBlue,
     4: TumColours.Gray,
+    6: TumColours.DarkGray
 }
 
 
