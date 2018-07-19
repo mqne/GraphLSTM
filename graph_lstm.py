@@ -103,7 +103,7 @@ class GraphLSTMCell(RNNCell):
     """
 
     def __init__(self, num_units, state_is_tuple=True, bias_initializer=None, weight_initializer=None,
-                 forget_gate_initializer=None, reuse=None, name=None):
+                 forget_bias_initializer=None, reuse=None, name=None):
         """Initialize the Graph LSTM cell.
 
         Args:
@@ -117,12 +117,13 @@ class GraphLSTMCell(RNNCell):
           weight_initializer: The initializer that should be used for initializing
             weights. If None, _init_weights uses a uniform initializer
             in the interval [-0.1, 0.1).
-          forget_gate_initializer: The initializer that should be used for initializing
+          forget_bias_initializer: The initializer that should be used for initializing
             the forget gate weight b_f. If None, _init_weights uses a
             constant initializer of 1.
           reuse: (optional) Python boolean describing whether to reuse variables
             in an existing scope.  If not `True`, and the existing scope already has
-            the given variables, an error is raised. todo: obsolete?
+            the given variables, an error is raised. Using this parameter will
+            result in untested behaviour. todo: obsolete?
           name: (optional) The name that will be used for this cell in the
             tensorflow namespace.
 
@@ -138,7 +139,7 @@ class GraphLSTMCell(RNNCell):
         self._state_is_tuple = state_is_tuple
         self._bias_initializer = bias_initializer
         self._weight_initializer = weight_initializer
-        self._forget_gate_initializer = forget_gate_initializer
+        self._forget_bias_initializer = forget_bias_initializer
 
     @property
     def state_size(self):
@@ -191,8 +192,8 @@ class GraphLSTMCell(RNNCell):
             if self._bias_initializer is None else self._bias_initializer
         weight_initializer = init_ops.random_uniform_initializer(-0.1, 0.1, dtype=dtype) \
             if self._weight_initializer is None else self._weight_initializer
-        forget_gate_initializer = init_ops.constant_initializer(1.0, dtype=dtype) \
-            if self._forget_gate_initializer is None else self._forget_gate_initializer
+        forget_bias_initializer = init_ops.constant_initializer(1.0, dtype=dtype) \
+            if self._forget_bias_initializer is None else self._forget_bias_initializer
 
         weight_dict = {}
 
@@ -205,7 +206,7 @@ class GraphLSTMCell(RNNCell):
                         weight = vs.get_variable(
                             name=weight_name, shape=self._get_weight_shape(weight_name, inputs),
                             dtype=dtype,
-                            initializer=forget_gate_initializer)
+                            initializer=forget_bias_initializer)
                 elif weight_name not in _BIASES:
                     weight = vs.get_variable(
                         name=weight_name, shape=self._get_weight_shape(weight_name, inputs),
@@ -234,7 +235,7 @@ class GraphLSTMCell(RNNCell):
                     weight = vs.get_variable(
                         name=weight_name, shape=self._get_weight_shape(weight_name, inputs),
                         dtype=dtype,
-                        initializer=forget_gate_initializer)
+                        initializer=forget_bias_initializer)
                 else:
                     weight = vs.get_variable(
                         name=weight_name, shape=self._get_weight_shape(weight_name, inputs),
@@ -729,22 +730,12 @@ class GraphLSTMNet(RNNCell):
             raise ValueError("Number of nodes in GraphLSTMNet input (%d) does not match number of graph nodes (%d)" %
                              (inputs.shape[-2], self._nxgraph.number_of_nodes()))
 
-        # weights shared between cells (e.g. Ufn) and weights unique for each cell (e.g. Uf): how to handle?
-        # ^this is for global Ufn local Un, which is NOT in the original paper! Paper: everything is global
-        # TODO: remove this comment after writing about it in thesis
-        # cell initializes local variables
-
         new_states = [None] * self._nxgraph.number_of_nodes()
         graph_output = [None] * self._nxgraph.number_of_nodes()
 
         # iterate over cells in graph, starting with highest confidence value
         for it, (node_name, node_obj) in enumerate(sorted(self._nxgraph.nodes(data=True),
                                                           key=lambda x: x[1][_CONFIDENCE], reverse=True)):
-            # # set scope according to if weights are being shared between all cells
-            # if self._shared_weights:
-            #     cell_scope = "global_weights"
-            # else:
-            #     cell_scope = "node_%s" % node_name
 
             # initialize scope for weights shared between all cells
             with vs.variable_scope("shared_weights", reuse=True if it > 0 else None) as shared_scope:

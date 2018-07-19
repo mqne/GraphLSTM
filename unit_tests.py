@@ -988,16 +988,16 @@ class TestGraphLSTMCellAndNet(tf.test.TestCase):
         #   to the shared weights
         cell_a = glstm.GraphLSTMCell(2, bias_initializer=tf.constant_initializer(1),
                                      weight_initializer=tf.initializers.identity(1),
-                                     forget_gate_initializer=tf.constant_initializer(1))
+                                     forget_bias_initializer=tf.constant_initializer(1))
         cell_b = glstm.GraphLSTMCell(2, bias_initializer=tf.constant_initializer(2),
                                      weight_initializer=tf.initializers.identity(2),
-                                     forget_gate_initializer=tf.constant_initializer(0))
+                                     forget_bias_initializer=tf.constant_initializer(0))
         cell_c = glstm.GraphLSTMCell(2, bias_initializer=tf.constant_initializer(-1),
                                      weight_initializer=tf.initializers.identity(-1),
-                                     forget_gate_initializer=tf.constant_initializer(-1))
+                                     forget_bias_initializer=tf.constant_initializer(-1))
         cell_d = glstm.GraphLSTMCell(2, bias_initializer=tf.constant_initializer(-2),
                                      weight_initializer=tf.initializers.identity(-2),
-                                     forget_gate_initializer=tf.constant_initializer(2))
+                                     forget_bias_initializer=tf.constant_initializer(2))
 
         weight_dict_a = {
             glstm._W_U: 1,
