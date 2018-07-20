@@ -67,10 +67,8 @@ region_ensemble_net.set_pca_bottleneck_weights(region_ensemble_net_pca)
 
 regen_input_tensor = region_ensemble_net.input
 regen_output_tensor = region_ensemble_net.output
-# here the Region Ensemble network is done initialising
 
-# # RegEnNet output tensor reshaped to [ batch_size, 21, 3 ]
-# regen_output_tensor_21_3 = tf.reshape(regen_output_tensor, shape=[-1, 21, 3])
+# here the Region Ensemble network is done initialising
 
 
 print("Building GraphLSTM network …")
@@ -83,7 +81,7 @@ nxgraph = glstm.GraphLSTMNet.create_nxgraph(HAND_GRAPH_HANDS2017,
                                             index_dict=HAND_GRAPH_HANDS2017_INDEX_DICT)
 graph_lstm_net = glstm.GraphLSTMNet(nxgraph, shared_weights=glstm.NEIGHBOUR_CONNECTIONS_SHARED)
 
-# overall output dimensions: batch_size, number_of_nodes, output_size
+# overall output dimensions: batch_size, number_of_nodes, output_size (unflatten RegEn output)
 regen_output_tensor_reshaped = graph_lstm_net.reshape_input_for_dynamic_rnn(regen_output_tensor)
 
 # normalize RegEn net output
@@ -105,45 +103,10 @@ glstm_output = tf.unstack(glstm_output_full, axis=1)[-1]
 # denormalize GraphLSTM output
 glstm_output_rescaled = undo_scaling(glstm_output)
 
-
-
-## allow upscaling of GLSTM output for increasing influence on final result
-#scale_factor = max(re.Const.SRC_IMAGE_SHAPE[0], re.Const.SRC_IMAGE_SHAPE[1]) * 2
-#glstm_output_scaled = tf.multiply(glstm_output, scale_factor)
 # here the Graph LSTM network is done initializing
 
-# Graph LSTM output is in range (-1, 1) because of tanh in the hidden state
 # employ residual connections around Graph LSTM
-
 residual_merge = tf.add(regen_output_tensor_reshaped, glstm_output_rescaled)
-
-# todo replace FC by residual connections: done
-
-# # FC layers 4 4 1 times output size
-# flattened_output_length = len(graph_lstm_net.output_size) * graph_lstm_net.output_size[0]
-#
-# glstm_output_flattened = tf.reshape(glstm_output, [tf.shape(glstm_output)[0], flattened_output_length])
-#
-# fc_1 = tf.layers.dense(glstm_output_flattened, flattened_output_length * 4, activation=tf.nn.relu)
-# fc_1_dropout = tf.layers.dropout(fc_1, training=K.learning_phase())  # Dropout
-# fc_2 = tf.layers.dense(fc_1_dropout, flattened_output_length * 4, activation=tf.nn.relu)
-# fc_2_dropout = tf.layers.dropout(fc_2, training=K.learning_phase())  # Dropout
-# fc_3 = tf.layers.dense(fc_2_dropout, flattened_output_length, activation=tf.nn.relu)
-#
-# fc_3_reshaped_to_output_dims = tf.reshape(fc_3, [tf.shape(fc_3)[0], len(graph_lstm_net.output_size), graph_lstm_net.output_size[0]])
-
-# # initialize weights for Graph LSTM output manipulation
-# with tf.variable_scope("glstm_output_scaling"):
-#     weight = tf.get_variable(
-#         name="weight", shape=[21,3],
-#         dtype=tf.float32,
-#         initializer=tf.constant_initializer(re.Const.SRC_IMAGE_SHAPE[0]))
-#     bias = tf.get_variable(
-#         name="bias", shape=[21,3],
-#         dtype=tf.float32,
-#         initializer=tf.constant_initializer(re.Const.SRC_IMAGE_SHAPE[0] // 2))
-#
-# glstm_scaled_output = tf.add(tf.multiply(weight, glstm_output), bias)
 
 print("Finished building model.\n")
 

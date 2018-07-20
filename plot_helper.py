@@ -161,6 +161,7 @@ def plot_ratio_of_frames_with_all_joints_within_bound(individual_errors, xlabel=
                         colours=colours)
 
 
+# positions of joints in the violin plot when grouped by joint type (wrist, MCP, PIP, DIP, TIP)
 joint_pos_group_by_type = {'Wrist': 1,
                            'TMCP': 3, 'IMCP': 4, 'MMCP': 5, 'RMCP': 6, 'PMCP': 7,
                            'TPIP': 9, 'IPIP': 10, 'MPIP': 11, 'RPIP': 12, 'PPIP': 13,
@@ -168,6 +169,7 @@ joint_pos_group_by_type = {'Wrist': 1,
                            'TTIP': 21, 'ITIP': 22, 'MTIP': 23, 'RTIP': 24, 'PTIP': 25,
                            }
 
+# positions of joints in the violin plot when grouped by finger (wrist, thumb, index, middle, ring, pinkie)
 joint_pos_group_by_finger = {"Wrist": 1,
                              "TMCP": 3, "IMCP": 8, "MMCP": 13, "RMCP": 18, "PMCP": 23,
                              "TPIP": 4, "TDIP": 5, "TTIP": 6,
