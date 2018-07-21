@@ -9,10 +9,16 @@ import os
 
 plt.switch_backend('agg')
 
-# prefix, model_name, epoch = get_prefix_model_name_optionally_epoch()
+
+# .npy files to be analysed are read from a text file which is given as the first command line argument.
+# FILE SYNTAX:
+# PATH                  COMMA   NAME                    (  COMMA        COMMENT  )
+# /path/to/file.npy     ,       Name used in plots         ,            Comment that will not appear in the plot
+#
+# Empty lines and lines starting with # are ignored
 
 
-# get prefix, model name and optionally epoch from command line
+# get path to npy-list file and optionally overall-plot switch (which can be anything) from command line
 def get_npyfilename_and_optional_switch():
     count = len(argv) - 1
     s = "path to text file containing .npy filenames (and optional switch for overall accuracy curve)"
@@ -49,6 +55,8 @@ test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.p
 graphlstm_timesteps = 2
 learning_rate = 1e-3
 
+# this is duplicated from multiple_hypotheses_extension,
+# as importing that module would load tensorflow which is not needed here
 HYPOTHESES_AXIS = 1
 
 # checkpoint_dir += r"/%s" % model_name
@@ -66,13 +74,6 @@ def clean_read_names_and_labels_from_file(path):
         raise LookupError("File seems to contain no entries.")
     names, labels = zip(*combined_list)
     return tuple([s.strip() for s in names]), tuple([s.strip() for s in labels])
-
-
-save_path = datetime.utcnow().strftime("analysis_%y%m%d-%H%M%S/")
-if do_overall_plot:
-    save_path = save_path.replace('_', '_overall_')
-if not os.path.exists(save_path):
-    os.makedirs(save_path)
 
 
 # # LOAD PREDICTIONS
@@ -119,6 +120,15 @@ except FileNotFoundError:
     np.save(groundtruth_npy_location, groundtruth)
 
 print("done.")
+
+
+# create path for storing analysis results
+save_path = datetime.utcnow().strftime("analysis_%y%m%d-%H%M%S/")
+if do_overall_plot:
+    save_path = save_path.replace('_', '_overall_')
+if not os.path.exists(save_path):
+    os.makedirs(save_path)
+    print("Created directory for analysis results at %s." % save_path)
 
 
 # # CALCULATE RESULTS
