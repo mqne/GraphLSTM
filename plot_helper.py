@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.signal import savgol_filter
 from helpers import ErrorCalculator as Ec
 from helpers import HAND_GRAPH_HANDS2017_INDEX_DICT, reverse_dict
 
@@ -54,7 +55,46 @@ def set_thesis_style():
     plt.rc('pgf', rcfonts=False)
     plt.rc('figure', autolayout=True)
 
+    plt.rc('lines', linewidth=0.625)
+
     print("PyPlot font style has been set to match TUM thesis.")
+
+
+def plot_loss(values, smoothing=.03, polyorder=3, name=None, epochs=100, scalars=10000, xlabel="Epoch", ylabel="Training loss", savepath=None, figsize=(5, 3), fontsize=10,
+              colour=TumColours.SecondaryBlue, bg_colour=TumColours.SecondaryBlue_20):
+    plt.rc('font', size=fontsize)
+    plt.figure(num=None, figsize=figsize)
+
+    x = np.linspace(0, epochs, len(values))
+
+    plt.plot(x, values, color=bg_colour)
+    # scale Savitzky-Golay window length to data
+    window_length = int(smoothing * len(values))
+    # make window length odd number
+    window_length += 1 - window_length % 2
+    smoothed_values = savgol_filter(values, window_length, polyorder)
+    plt.plot(x, smoothed_values, color=colour)
+
+    plt.xlim(0, epochs)
+    plt.ylim(0, 2)
+
+    plt.xticks(np.linspace(0, epochs, 11))
+    plt.yticks(np.linspace(0, 2, 5))
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+
+    if name is not None:
+        legend = (name + " (actual)", name + " (smoothed)")
+        plt.legend(legend, fancybox=False, edgecolor=TumColours.LightGray)
+
+    if savepath is not None:
+        plt.savefig(savepath + ".pgf")
+        plt.savefig(savepath + ".pdf")
+        plt.savefig(savepath + ".png", dpi=300)
+    else:
+        plt.show()
+    plt.close()
+    plt.rc('font', size=plt.rcParamsDefault['font.size'])
 
 
 # plot cumulative error across validation frames
@@ -98,7 +138,7 @@ def plot_accuracy_curve(individual_errors, xlabel, ylabel, legend=None, savepath
     plt.xlim(0, max_err)
     plt.ylim(0, 100)
     plt.yticks(np.linspace(0, 100, 3))
-    plt.xlabel(xlabel)  # todo unit mm?
+    plt.xlabel(xlabel)
     plt.ylabel(ylabel)
 
     if legend is not None:

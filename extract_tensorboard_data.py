@@ -7,6 +7,7 @@ from tensorboard.backend.event_processing.event_accumulator import EventAccumula
 import matplotlib.pyplot as plt
 
 from sys import argv
+from collections import namedtuple
 
 
 def get_from_commandline_args(count, args_string=None):
@@ -45,12 +46,14 @@ def print_log_contents(event_acc):
 
 
 def get_scalars(event_acc):
-    return [(s, np.asarray(event_acc.Scalars(s)).swapaxes(0, 1)[2]) for s in event_acc.Tags()['scalars']]
+    Scalar = namedtuple('Scalar', ('name', 'values'))
+    return [Scalar(s, np.asarray(event_acc.Scalars(s)).swapaxes(0, 1)[2]) for s in event_acc.Tags()['scalars']]
 
 
 def get_histograms(event_acc):
-    # to be plotted with plt.plot(array[0], array[1]) ; plt.xlim(-1,1)
-    return [(s, np.asarray(np.asarray(event_acc.Histograms(s))[0][2][5], np.asarray(event_acc.Histograms(s))[0][2][6]))
+    # to be plotted with plt.plot(h.buckets, h.count) ; plt.xlim(-1,1)
+    Histogram = namedtuple('Histogram', ('name', 'buckets', 'count'))
+    return [Histogram(s, np.asarray(event_acc.Histograms(s))[0][2][5], np.asarray(event_acc.Histograms(s))[0][2][6])
             for s in event_acc.Tags()['histograms']]
 
 
@@ -93,13 +96,13 @@ if __name__ == '__main__':
 
     print("Converting data …")
     scalars = get_scalars(eva)
-    histograms = get_histograms()
+    histograms = get_histograms(eva)
 
     # store scalars
-    for name, array in scalars:
-        npyname = name + '_' + model_name
-        print("Storing '%s' at %s …" % (name, npyname))
-        np.save(checkpoint_dir + "/" + npyname, array)
+    for s in scalars:
+        npyname = s.name + '_' + model_name
+        print("Storing '%s' at %s …" % (s.name, npyname))
+        np.save(checkpoint_dir + "/" + npyname, s.values)
 
     # store histograms
     # TODO
