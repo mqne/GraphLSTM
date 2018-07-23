@@ -34,7 +34,11 @@ PlotColours = {
     5: TumColours.SecondaryBlue2,
     2: TumColours.AccentBlue,
     4: TumColours.Gray,
-    6: TumColours.DarkGray
+    6: TumColours.SecondaryBlue_20,
+    7: TumColours.SecondaryBlue_80,
+    8: TumColours.LightGray,
+    9: TumColours.DarkGray,
+    10: TumColours.SecondaryBlue2_50
 }
 
 

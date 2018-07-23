@@ -24,7 +24,7 @@ import os
 
 pretrained_prefix = "train-r01"
 pretrained_model_name = "regen41_adamlr0.001000"
-load_epoch = 35  # todo adapt
+load_epoch = 60  # todo adapt
 
 
 # dataset path declarations

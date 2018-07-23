@@ -80,7 +80,7 @@ def lr_mult(alpha):
 def get_from_commandline_args(count, args_string=None):
     if len(argv) - 1 != count:
         print("You need to enter exactly %i command line arguments%s, "
-              "but found %i" % (count, '' if args_string is None else "(%s)" % args_string, len(argv) - 1))
+              "but found %i" % (count, '' if args_string is None else " (%s)" % args_string, len(argv) - 1))
         exit(1)
 
     return tuple(argv[1:])
