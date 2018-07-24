@@ -43,6 +43,7 @@ def train_validate_split(train_validate_list, split=0.8):
 
 
 def normalize_for_glstm(tensor):  # todo move to GraphLSTMNet?
+    # tensor is normalized to range[-0.5, 0.5]
     # this function assumes tensors with shape [ batch_size, number_of_nodes, output_size=3 ]
     assert(len(tensor.shape) == 3)
     # compute maximum and minimum joint position value in each of x,y,z

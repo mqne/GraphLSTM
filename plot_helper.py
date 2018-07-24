@@ -27,6 +27,9 @@ class TumColours:
     AccentGreen = '#A2AD00'
     AccentLightBlue = '#98C6EA'
     AccentBlue = '#64A0C8'
+    XSecondaryBlue_10 = '#e5edf4'
+    XSecondaryBlue_35 = '#a6c2d9'
+    XSecondaryBlue_65 = '#598eb9'
 
 
 PlotColours = {
@@ -60,7 +63,7 @@ def set_thesis_style():
     print("PyPlot font style has been set to match TUM thesis.")
 
 
-def plot_loss(values, smoothing=.03, polyorder=3, name=None, epochs=100, scalars=10000, xlabel="Epoch", ylabel="Training loss", savepath=None, figsize=(5, 3), fontsize=10,
+def plot_loss(values, smoothing=.03, polyorder=3, name=None, epochs=100, xlabel="Epoch", ylabel="Training loss", savepath=None, figsize=(5, 3), fontsize=10,
               colour=TumColours.SecondaryBlue, bg_colour=TumColours.SecondaryBlue_20):
     plt.rc('font', size=fontsize)
     plt.figure(num=None, figsize=figsize)
@@ -95,6 +98,53 @@ def plot_loss(values, smoothing=.03, polyorder=3, name=None, epochs=100, scalars
         plt.show()
     plt.close()
     plt.rc('font', size=plt.rcParamsDefault['font.size'])
+
+
+def plot_distribution(compressed_histogram, name, data_epochs=100, plot_epochs=None, xticks=None, ylim=0.5,
+                      xlabel="Epoch", ylabel="output", savepath=None, figsize=(5, 3), fontsize=10):
+    plt.rc('font', size=fontsize)
+    plt.figure(num=None, figsize=figsize)
+
+    x = np.asarray(compressed_histogram.steps) * data_epochs / compressed_histogram.steps[-1]
+    ylabel = name + ' ' + ylabel
+    if plot_epochs is None:
+        plot_epochs = data_epochs
+    if xticks is None:
+        if plot_epochs % 10 != 0:
+            print("WARNING: automatic x-ticks in distribution for %i epochs yields non-integer labels.\n"
+                  "Consider passing manual x-ticks via parameter 'xticks'." % plot_epochs)
+        xticks = np.linspace(0, plot_epochs, 11)
+
+    plt.fill_between(x, compressed_histogram.Infm, compressed_histogram.Infp,
+                     color=TumColours.SecondaryBlue_20, linewidth=0.0)
+    plt.fill_between(x, compressed_histogram.stdm3, compressed_histogram.stdp3,
+                     color=TumColours.XSecondaryBlue_35, linewidth=0.0)
+    plt.fill_between(x, compressed_histogram.stdm2, compressed_histogram.stdp2,
+                     color=TumColours.SecondaryBlue_50, linewidth=0.0)
+    plt.fill_between(x, compressed_histogram.stdm1, compressed_histogram.stdp1,
+                     color=TumColours.XSecondaryBlue_65, linewidth=0.0)
+    plt.plot(x, compressed_histogram.median,
+             color=TumColours.SecondaryBlue)
+
+    plt.xlim(0, plot_epochs)
+    plt.ylim(-ylim, ylim)
+
+    plt.xticks(xticks)
+    plt.yticks(np.linspace(-ylim, ylim, 3))
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+
+    if savepath is not None:
+        plt.savefig(savepath + ".pgf")
+        plt.savefig(savepath + ".pdf")
+        plt.savefig(savepath + ".png", dpi=300)
+    else:
+        plt.show()
+    plt.close()
+    plt.rc('font', size=plt.rcParamsDefault['font.size'])
+
+
+# TODO: plot histograms
 
 
 # plot cumulative error across validation frames

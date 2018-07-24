@@ -38,8 +38,7 @@ def get_prefix_and_model_name():
 def load_tensorflow_log(path):
 
     tf_size_guidance = {
-        'compressed_histograms': 10000,
-        'images': 0,
+        'distributions': 10000,
         'scalars': 10000,
         'histograms': 10000
     }
@@ -107,7 +106,7 @@ def get_compressed_histograms(event_acc):
         chist_list.append(CompressedHistogram(name, steps,
                                               Infm, stdm3, stdm2, stdm1,
                                               median,
-                                              stdp1, stdp2, stdm3, Infp))
+                                              stdp1, stdp2, stdp3, Infp))
 
     return chist_list
 
@@ -177,7 +176,7 @@ if __name__ == '__main__':
     histograms = get_histograms(eva)
     compressed_histograms = get_compressed_histograms(eva)
 
-    path_list.extend(save_to_dir(validation_dir, scalars, histograms, compressed_histograms, prefix='validation_'))
+    path_list.extend(save_to_dir(validation_dir, scalars, histograms, compressed_histograms, prefix='validation'))
 
     print("Done.")
     print("\nThe following files have been created:")
