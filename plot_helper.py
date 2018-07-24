@@ -147,13 +147,17 @@ def plot_distribution(compressed_histogram, name, data_epochs=100, plot_epochs=N
     plt.rc('font', size=plt.rcParamsDefault['font.size'])
 
 
-def plot_histogram_discrete_sampled(histogram, name, data_epochs=1, plot_start_epoch=1, plot_end_epoch=1):
+def plot_histogram_discrete_sampled(histogram, name, data_epochs=1, plot_start_epoch=None, plot_end_epoch=None):
     print("WARNING: plot_histogram_discrete_sampled displays step artifacts from TensorFlow storage method.\n"
           "plot_histogram_continuous is more likely what you are looking for.")
-    # sample histogram
-    values = []
+    if plot_start_epoch is None:
+        plot_start_epoch = 1
+    if plot_end_epoch is None:
+        plot_end_epoch = data_epochs
     start_index = (-1 + plot_start_epoch) * len(histogram.steps) // data_epochs
     end_index = (-1 + plot_end_epoch + 1) * len(histogram.steps) // data_epochs
+    # sample histogram
+    values = []
     for hs in range(start_index, end_index):
         for i in range(len(histogram.steps[hs].bucket_low_limit)-2):
             values.extend(np.random.uniform(histogram.steps[hs].bucket_low_limit[i],
@@ -229,7 +233,7 @@ def plot_histogram_continuous(histogram, name, xmin=-0.5, xmax=0.5, xticks=11,
     y_s = np.array(y_s)
     y_s /= trapz(y_s, x_s)
 
-    plt.fill_between(x_s, y_s, color=TumColours.SecondaryBlue_50, linewidth=0.0)
+    plt.fill_between(x_s, y_s, color=TumColours.SecondaryBlue_80, linewidth=0.0)
     # plt.plot(x_s, y_s, color=TumColours.SecondaryBlue_80)
 
     plt.xlim(xmin, xmax)
