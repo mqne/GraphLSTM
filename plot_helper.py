@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
+from scipy.integrate import trapz
+
 from helpers import ErrorCalculator as Ec
 from helpers import HAND_GRAPH_HANDS2017_INDEX_DICT, reverse_dict
 
@@ -70,7 +72,7 @@ def plot_loss(values, smoothing=.03, polyorder=3, name=None, epochs=100, xlabel=
 
     x = np.linspace(0, epochs, len(values))
 
-    plt.plot(x, values, color=bg_colour)
+    plt.plot(x, values, color=bg_colour, linewidth=plt.rcParams['lines.linewidth']/2)
     # scale Savitzky-Golay window length to data
     window_length = int(smoothing * len(values))
     # make window length odd number
@@ -105,7 +107,6 @@ def plot_distribution(compressed_histogram, name, data_epochs=100, plot_epochs=N
     plt.rc('font', size=fontsize)
     plt.figure(num=None, figsize=figsize)
 
-    x = np.asarray(compressed_histogram.steps) * data_epochs / compressed_histogram.steps[-1]
     ylabel = name + ' ' + ylabel
     if plot_epochs is None:
         plot_epochs = data_epochs
@@ -114,6 +115,8 @@ def plot_distribution(compressed_histogram, name, data_epochs=100, plot_epochs=N
             print("WARNING: automatic x-ticks in distribution for %i epochs yields non-integer labels.\n"
                   "Consider passing manual x-ticks via parameter 'xticks'." % plot_epochs)
         xticks = np.linspace(0, plot_epochs, 11)
+
+    x = np.asarray(compressed_histogram.steps) * data_epochs / compressed_histogram.steps[-1]
 
     plt.fill_between(x, compressed_histogram.Infm, compressed_histogram.Infp,
                      color=TumColours.SecondaryBlue_20, linewidth=0.0)
@@ -144,7 +147,107 @@ def plot_distribution(compressed_histogram, name, data_epochs=100, plot_epochs=N
     plt.rc('font', size=plt.rcParamsDefault['font.size'])
 
 
-# TODO: plot histograms
+def plot_histogram_discrete_sampled(histogram, name, data_epochs=1, plot_start_epoch=1, plot_end_epoch=1):
+    print("WARNING: plot_histogram_discrete_sampled displays step artifacts from TensorFlow storage method.\n"
+          "plot_histogram_continuous is more likely what you are looking for.")
+    # sample histogram
+    values = []
+    start_index = (-1 + plot_start_epoch) * len(histogram.steps) // data_epochs
+    end_index = (-1 + plot_end_epoch + 1) * len(histogram.steps) // data_epochs
+    for hs in range(start_index, end_index):
+        for i in range(len(histogram.steps[hs].bucket_low_limit)-2):
+            values.extend(np.random.uniform(histogram.steps[hs].bucket_low_limit[i],
+                                            histogram.steps[hs].bucket_low_limit[i+1],
+                                            int(histogram.steps[hs].bucket_filling[i+1])))
+
+    h = np.histogram(values, 'auto', density=True)
+    plt.fill_between(h[1], np.insert(h[0], 0, 0.), step='pre')
+    plt.show()
+    plt.close()
+
+
+def plot_histogram_continuous(histogram, name, xmin=-0.5, xmax=0.5, xticks=11,
+                              data_epochs=1, plot_start_epoch=None, plot_end_epoch=None,
+                              xlabel="output", ylabel="Prediction density", savepath=None, figsize=(7, 3), fontsize=10):
+    plt.rc('font', size=fontsize)
+    plt.figure(num=None, figsize=figsize)
+
+    epsilon = (xmax-xmin) / 10000
+    if plot_start_epoch is None:
+        plot_start_epoch = 1
+    if plot_end_epoch is None:
+        plot_end_epoch = data_epochs
+    start_index = (-1 + plot_start_epoch) * len(histogram.steps) // data_epochs
+    end_index = (-1 + plot_end_epoch + 1) * len(histogram.steps) // data_epochs
+
+    x = []
+    y = []
+    weights = []
+    for hs in range(start_index, end_index):
+        for i in range(len(histogram.steps[hs].bucket_low_limit)-2):
+            x.append(np.mean((histogram.steps[hs].bucket_low_limit[i], histogram.steps[hs].bucket_low_limit[i + 1])))
+            y.append(histogram.steps[hs].bucket_filling[i + 1])
+            weights.append(histogram.steps[hs].bucket_low_limit[i + 1] - histogram.steps[hs].bucket_low_limit[i])
+
+    sort_indices = np.argsort(x)
+    x = np.array(x)[sort_indices]
+    y = np.array(y)[sort_indices]
+    weights = np.array(weights)[sort_indices]
+
+    # merge x distances < epsilon
+    i = 0
+    x_s = []
+    y_s = []
+    w_s = []
+    while i < len(x) - 1:
+        if x[i+1] - x[i] > epsilon:
+            x_s.append(x[i])
+            y_s.append(y[i] / weights[i])
+            w_s.append(weights[i])
+        else:
+            shift = 1
+            while i+1+shift < len(x) and x[i+1+shift] - x[i] <= epsilon:
+                shift += 1
+            y_new = np.sum([y[j] for j in range(i, i+shift)])
+            weight_new = np.sum([weights[j] for j in range(i, i+shift)])
+            y_s.append(y_new / weight_new)
+            x_s.append(np.mean([x[j] for j in range(i, i+shift)]))
+            w_s.append(weight_new)
+            i += shift
+        i += 1
+
+    # fix faulty log data
+    outliers = 0
+    for i in range(1, len(y_s)-1):
+        if y_s[i] == 0 and y_s[i-1] > 0 and y_s[i+1] > 0:
+            y_s[i] = np.average([y_s[i-1], y_s[i+1]], weights=[x_s[i+1]-x_s[i], x_s[i]-x_s[i-1]])
+            outliers += 1
+    if outliers != 0:
+        print("Removed %i (probable) zero-outliers from histogram data." % outliers)
+
+    # normalize y axis
+    y_s = np.array(y_s)
+    y_s /= trapz(y_s, x_s)
+
+    plt.fill_between(x_s, y_s, color=TumColours.SecondaryBlue_50, linewidth=0.0)
+    # plt.plot(x_s, y_s, color=TumColours.SecondaryBlue_80)
+
+    plt.xlim(xmin, xmax)
+    plt.ylim(0)
+
+    plt.xticks(np.linspace(xmin, xmax, xticks))
+
+    plt.xlabel(name + ' ' + xlabel)
+    plt.ylabel(ylabel)
+
+    if savepath is not None:
+        plt.savefig(savepath + ".pgf")
+        plt.savefig(savepath + ".pdf")
+        plt.savefig(savepath + ".png", dpi=300)
+    else:
+        plt.show()
+    plt.close()
+    plt.rc('font', size=plt.rcParamsDefault['font.size'])
 
 
 # plot cumulative error across validation frames
