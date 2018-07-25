@@ -47,6 +47,9 @@ PlotColours = {
     10: TumColours.SecondaryBlue2_50
 }
 
+# pagewidth of text in thesis, obtained by LaTeX: \printinunitsof{in}\prntlen{\textwidth}
+PAGEWIDTH_INCHES = 5.78853
+
 
 def set_thesis_style():
     plt.rc('text', usetex=True)
@@ -65,7 +68,7 @@ def set_thesis_style():
     print("PyPlot font style has been set to match TUM thesis.")
 
 
-def plot_loss(values, smoothing=.03, polyorder=3, name=None, epochs=100, xlabel="Epoch", ylabel="Training loss", savepath=None, figsize=(5, 3), fontsize=10,
+def plot_loss(values, ymax=2, smoothing=.03, polyorder=3, name=None, epochs=100, xlabel="Epoch", ylabel="Training loss", savepath=None, figsize=(5, 3), fontsize=10,
               colour=TumColours.SecondaryBlue, bg_colour=TumColours.SecondaryBlue_20):
     plt.rc('font', size=fontsize)
     plt.figure(num=None, figsize=figsize)
@@ -77,14 +80,14 @@ def plot_loss(values, smoothing=.03, polyorder=3, name=None, epochs=100, xlabel=
     window_length = int(smoothing * len(values))
     # make window length odd number
     window_length += 1 - window_length % 2
-    smoothed_values = savgol_filter(values, window_length, polyorder)
+    smoothed_values = savgol_filter(np.minimum(values, ymax+2), window_length, polyorder)
     plt.plot(x, smoothed_values, color=colour)
 
     plt.xlim(0, epochs)
-    plt.ylim(0, 2)
+    plt.ylim(0, ymax)
 
     plt.xticks(np.linspace(0, epochs, 11))
-    plt.yticks(np.linspace(0, 2, 5))
+    plt.yticks(np.linspace(0, ymax, 5))
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
 
@@ -172,7 +175,7 @@ def plot_histogram_discrete_sampled(histogram, name, data_epochs=1, plot_start_e
 
 def plot_histogram_continuous(histogram, name, xmin=-0.5, xmax=0.5, xticks=11,
                               data_epochs=1, plot_start_epoch=None, plot_end_epoch=None,
-                              xlabel="output", ylabel="Prediction density", savepath=None, figsize=(7, 3), fontsize=10):
+                              xlabel="output", ylabel="Prediction density", savepath=None, figsize=(5, 2), fontsize=10):
     plt.rc('font', size=fontsize)
     plt.figure(num=None, figsize=figsize)
 
@@ -386,7 +389,7 @@ def violinplot_error_per_joint(individual_errors,
                                ylabel='Error in mm',
                                max_err=20,
                                savepath=None,
-                               figsize=(8, 3),
+                               figsize=(PAGEWIDTH_INCHES, 2.5),
                                fontsize=10):
     errors_per_joint = Ec.reduce_xyz_norm(individual_errors)
     node_dict = reverse_dict(index_dict)
