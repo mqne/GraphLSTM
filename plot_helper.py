@@ -105,7 +105,7 @@ def plot_loss(values, ymax=2, smoothing=.03, polyorder=3, name=None, epochs=100,
     plt.rc('font', size=plt.rcParamsDefault['font.size'])
 
 
-def plot_distribution(compressed_histogram, name, data_epochs=100, plot_epochs=None, xticks=None, ylim=0.5,
+def plot_distribution(compressed_histogram, name, data_epochs=100, plot_epochs=None, xticks=None, ymax=0.5, ymin=None,
                       xlabel="Epoch", ylabel="output", savepath=None, figsize=(5, 3), fontsize=10):
     plt.rc('font', size=fontsize)
     plt.figure(num=None, figsize=figsize)
@@ -118,6 +118,8 @@ def plot_distribution(compressed_histogram, name, data_epochs=100, plot_epochs=N
             print("WARNING: automatic x-ticks in distribution for %i epochs yields non-integer labels.\n"
                   "Consider passing manual x-ticks via parameter 'xticks'." % plot_epochs)
         xticks = np.linspace(0, plot_epochs, 11)
+    if ymin is None:
+        ymin = -ymax
 
     x = np.asarray(compressed_histogram.steps) * data_epochs / compressed_histogram.steps[-1]
 
@@ -133,10 +135,10 @@ def plot_distribution(compressed_histogram, name, data_epochs=100, plot_epochs=N
              color=TumColours.SecondaryBlue)
 
     plt.xlim(0, plot_epochs)
-    plt.ylim(-ylim, ylim)
+    plt.ylim(ymin, ymax)
 
     plt.xticks(xticks)
-    plt.yticks(np.linspace(-ylim, ylim, 3))
+    plt.yticks(np.unique((ymin, 0, ymax)))
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
 
