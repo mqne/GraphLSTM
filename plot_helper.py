@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
 from scipy.integrate import trapz
+from scipy.stats import norm
+from tqdm import tqdm
 
 from helpers import ErrorCalculator as Ec
 from helpers import HAND_GRAPH_HANDS2017_INDEX_DICT, reverse_dict
@@ -152,9 +154,10 @@ def plot_distribution(compressed_histogram, name, data_epochs=100, plot_epochs=N
     plt.rc('font', size=plt.rcParamsDefault['font.size'])
 
 
+# shows tensorflow bin discretization
 def plot_histogram_discrete_sampled(histogram, name, data_epochs=1, plot_start_epoch=None, plot_end_epoch=None):
     print("WARNING: plot_histogram_discrete_sampled displays step artifacts from TensorFlow storage method.\n"
-          "plot_histogram_continuous is more likely what you are looking for.")
+          "plot_histogram_continuous_sampled is more likely what you are looking for.")
     if plot_start_epoch is None:
         plot_start_epoch = 1
     if plot_end_epoch is None:
@@ -163,7 +166,7 @@ def plot_histogram_discrete_sampled(histogram, name, data_epochs=1, plot_start_e
     end_index = (-1 + plot_end_epoch + 1) * len(histogram.steps) // data_epochs
     # sample histogram
     values = []
-    for hs in range(start_index, end_index):
+    for hs in tqdm(range(start_index, end_index), desc="Sampling uniform distributions for histogram", leave=False, unit=' histslices'):
         for i in range(len(histogram.steps[hs].bucket_low_limit)-2):
             values.extend(np.random.uniform(histogram.steps[hs].bucket_low_limit[i],
                                             histogram.steps[hs].bucket_low_limit[i+1],
@@ -175,13 +178,127 @@ def plot_histogram_discrete_sampled(histogram, name, data_epochs=1, plot_start_e
     plt.close()
 
 
-def plot_histogram_continuous(histogram, name, xmin=-0.5, xmax=0.5, xticks=11,
-                              data_epochs=1, plot_start_epoch=None, plot_end_epoch=None,
-                              xlabel="output", ylabel="Prediction density", savepath=None, figsize=(5, 2), fontsize=10):
+# highest quality, but slowest
+def plot_histogram_continuous(histogram, name, xmin=-0.5, xmax=0.5, xticks=11, ymax=None,
+                              data_epochs=1, plot_start_epoch=None, plot_end_epoch=None, plot_normal=False,
+                              xlabel="output", ylabel="Prediction density", savepath=None, figsize=(5, 2),
+                              fontsize=10):
     plt.rc('font', size=fontsize)
     plt.figure(num=None, figsize=figsize)
 
-    epsilon = (xmax-xmin) / 10000
+    if plot_start_epoch is None:
+        plot_start_epoch = 1
+    if plot_end_epoch is None:
+        plot_end_epoch = data_epochs
+    start_index = (-1 + plot_start_epoch) * len(histogram.steps) // data_epochs
+    end_index = (-1 + plot_end_epoch + 1) * len(histogram.steps) // data_epochs
+
+    # estimate histogram by summing gaussians
+    x = np.linspace(xmin, xmax, 1000)
+    y = np.zeros(1000)
+    for hs in tqdm(range(start_index, end_index), desc="Calculating Gaussians for histogram", leave=False, unit=' histslices'):
+        for i in range(len(histogram.steps[hs].bucket_low_limit) - 2):
+            y_norm = norm.pdf(x,
+                              np.mean((histogram.steps[hs].bucket_low_limit[i],
+                                       histogram.steps[hs].bucket_low_limit[i + 1])),
+                              (histogram.steps[hs].bucket_low_limit[i + 1] - histogram.steps[hs].bucket_low_limit[i]) / 1.5,)
+            y += y_norm * histogram.steps[hs].bucket_filling[i + 1]
+    y /= trapz(y, x)
+
+    plt.fill_between(x, y, color=TumColours.SecondaryBlue_80, linewidth=0.0)
+
+    # plot estimated corresponding normal distribution
+    if plot_normal:
+        mean = np.average(x, weights=y)
+        var = np.average((np.array(x) - mean) ** 2, weights=y)
+        std = np.sqrt(var)
+        y_norm = norm.pdf(x, mean, std)
+        plt.plot(x, y_norm, color=TumColours.AccentGray)
+
+    plt.xlim(xmin, xmax)
+    plt.ylim(0, ymax)
+
+    plt.xticks(np.linspace(xmin, xmax, xticks))
+
+    plt.xlabel(name + ' ' + xlabel)
+    plt.ylabel(ylabel)
+
+    if savepath is not None:
+        plt.savefig(savepath + ".pgf")
+        plt.savefig(savepath + ".pdf")
+        plt.savefig(savepath + ".png", dpi=300)
+    else:
+        plt.show()
+    plt.close()
+    plt.rc('font', size=plt.rcParamsDefault['font.size'])
+
+
+# high quality, discretization of histogram visible
+def plot_histogram_continuous_sampled(histogram, name, xmin=-0.5, xmax=0.5, xticks=11, ymax=None,
+                                      data_epochs=1, plot_start_epoch=None, plot_end_epoch=None, plot_normal=False,
+                                      xlabel="output", ylabel="Prediction density", savepath=None, figsize=(5, 2),
+                                      fontsize=10):
+    plt.rc('font', size=fontsize)
+    plt.figure(num=None, figsize=figsize)
+
+    if plot_start_epoch is None:
+        plot_start_epoch = 1
+    if plot_end_epoch is None:
+        plot_end_epoch = data_epochs
+    start_index = (-1 + plot_start_epoch) * len(histogram.steps) // data_epochs
+    end_index = (-1 + plot_end_epoch + 1) * len(histogram.steps) // data_epochs
+
+    # sample histogram
+    values = []
+    for hs in tqdm(range(start_index, end_index), desc="Sampling Gaussians for histogram", leave=False, unit=' histslices'):
+        for i in range(len(histogram.steps[hs].bucket_low_limit)-2):
+            values.extend(np.random.normal(np.mean((histogram.steps[hs].bucket_low_limit[i], histogram.steps[hs].bucket_low_limit[i+1])),
+                                           (histogram.steps[hs].bucket_low_limit[i+1] - histogram.steps[hs].bucket_low_limit[i])/1.5,
+                                           int(histogram.steps[hs].bucket_filling[i+1])))
+
+    h = np.histogram(values, 'auto', density=True)
+    plt.fill_between(h[1], np.insert(h[0], 0, 0.), step='pre', color=TumColours.SecondaryBlue_80, linewidth=0.0)
+
+    # plot estimated corresponding normal distribution
+    if plot_normal:
+        mean, std = norm.fit(values)
+        # mean = np.average(x_s, weights=y_s)
+        # var = np.average((np.array(x_s) - mean) ** 2, weights=y_s)
+        # std = np.sqrt(var)
+        x_norm = np.linspace(xmin, xmax, 1000)
+        y_norm = norm.pdf(x_norm, mean, std)
+        plt.plot(x_norm, y_norm, color=TumColours.AccentGray)
+
+    plt.xlim(xmin, xmax)
+    plt.ylim(0, ymax)
+
+    plt.xticks(np.linspace(xmin, xmax, xticks))
+
+    plt.xlabel(name + ' ' + xlabel)
+    plt.ylabel(ylabel)
+
+    if savepath is not None:
+        plt.savefig(savepath + ".pgf")
+        plt.savefig(savepath + ".pdf")
+        plt.savefig(savepath + ".png", dpi=300)
+    else:
+        plt.show()
+    plt.close()
+    plt.rc('font', size=plt.rcParamsDefault['font.size'])
+
+
+# fast and step-less, but prone to artifacts
+def plot_histogram_analytical(histogram, name, xmin=-0.5, xmax=0.5, xticks=11, ymax=None,
+                              data_epochs=1, plot_start_epoch=None, plot_end_epoch=None, plot_normal=False,
+                              epsilon=1e-4,
+                              xlabel="output", ylabel="Prediction density", savepath=None, figsize=(5, 2), fontsize=10):
+    print("WARNING: plot_histogram_analytical is fast, but prone to artifacts.")
+    if plot_normal:
+        print("WARNING: plot_normal of plot_histogram_analytical is slightly skewed.")
+    plt.rc('font', size=fontsize)
+    plt.figure(num=None, figsize=figsize)
+
+    epsilon = (xmax-xmin) * epsilon
     if plot_start_epoch is None:
         plot_start_epoch = 1
     if plot_end_epoch is None:
@@ -192,7 +309,7 @@ def plot_histogram_continuous(histogram, name, xmin=-0.5, xmax=0.5, xticks=11,
     x = []
     y = []
     weights = []
-    for hs in range(start_index, end_index):
+    for hs in tqdm(range(start_index, end_index), desc="Analysing input data for histogram", leave=False, unit=' histslices'):
         for i in range(len(histogram.steps[hs].bucket_low_limit)-2):
             x.append(np.mean((histogram.steps[hs].bucket_low_limit[i], histogram.steps[hs].bucket_low_limit[i + 1])))
             y.append(histogram.steps[hs].bucket_filling[i + 1])
@@ -212,6 +329,7 @@ def plot_histogram_continuous(histogram, name, xmin=-0.5, xmax=0.5, xticks=11,
         if x[i+1] - x[i] > epsilon:
             x_s.append(x[i])
             y_s.append(y[i] / weights[i])
+            # y_s.append(y[i] / np.maximum(weights[i], 1))
             w_s.append(weights[i])
         else:
             shift = 1
@@ -220,6 +338,7 @@ def plot_histogram_continuous(histogram, name, xmin=-0.5, xmax=0.5, xticks=11,
             y_new = np.sum([y[j] for j in range(i, i+shift)])
             weight_new = np.sum([weights[j] for j in range(i, i+shift)])
             y_s.append(y_new / weight_new)
+            # y_s.append(y_new / np.maximum(weight_new, 1))
             x_s.append(np.mean([x[j] for j in range(i, i+shift)]))
             w_s.append(weight_new)
             i += shift
@@ -241,8 +360,18 @@ def plot_histogram_continuous(histogram, name, xmin=-0.5, xmax=0.5, xticks=11,
     plt.fill_between(x_s, y_s, color=TumColours.SecondaryBlue_80, linewidth=0.0)
     # plt.plot(x_s, y_s, color=TumColours.SecondaryBlue_80)
 
+    # plot estimated corresponding normal distribution
+    if plot_normal:
+        x_s = np.array(x_s)
+        mean = np.average(x_s, weights=y_s)
+        var = np.average((np.array(x_s[1:-1]) - mean) ** 2, weights=y_s[1:-1] * (x_s[2:] - x_s[:-2]))
+        std = np.sqrt(var)
+        x_norm = np.linspace(xmin, xmax, 1000)
+        y_norm = norm.pdf(x_norm, mean, std)
+        plt.plot(x_norm, y_norm, color=TumColours.AccentGray)
+
     plt.xlim(xmin, xmax)
-    plt.ylim(0)
+    plt.ylim(0, ymax)
 
     plt.xticks(np.linspace(xmin, xmax, xticks))
 

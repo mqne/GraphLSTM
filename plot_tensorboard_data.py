@@ -45,6 +45,10 @@ glstm_comp_hist_suffix = "_comp_hist_Graph_LSTM_output.pkl"
 dpren_comp_hist_suffix = "_comp_hist_Region_Ensemble_net_output.pkl"
 network_comp_hist_suffix = "_comp_hist_Network_output.pkl"
 
+val_glstm_hist_suffix = "_validation_hist_Graph_LSTM_output.pkl"
+val_dpren_hist_suffix = "_validation_hist_Region_Ensemble_net_output.pkl"
+val_network_hist_suffix = "_validation_hist_Network_output.pkl"
+
 if __name__ == '__main__':
     model_name = get_model_name()[0]
 
@@ -64,6 +68,15 @@ if __name__ == '__main__':
     dpren_dist = pd.load(open(data_dir + model_name + dpren_comp_hist_suffix, 'rb'))
     network_dist = pd.load(open(data_dir + model_name + network_comp_hist_suffix, 'rb'))
 
+    # histograms
+    val_glstm_hist = pd.load(open(data_dir + model_name + val_glstm_hist_suffix, 'rb'))
+    val_network_hist = pd.load(open(data_dir + model_name + val_network_hist_suffix, 'rb'))
+    val_dpren_hist = pd.load(open(data_dir + model_name + val_dpren_hist_suffix, 'rb'))
+
+    dpren_hist = pd.load(open(data_dir + model_name + dpren_hist_suffix, 'rb'))
+    glstm_hist = pd.load(open(data_dir + model_name + glstm_hist_suffix, 'rb'))
+    network_hist = pd.load(open(data_dir + model_name + network_hist_suffix, 'rb'))
+
     print("done.")
 
     # removing dots from model name for latex file compatibility
@@ -73,11 +86,20 @@ if __name__ == '__main__':
     # plot_helper.plot_loss(loss.values, savepath=model_name + "_training_loss")
     # print("done.")
 
-    print("Plotting distributions …")
-    plot_helper.plot_distribution(glstm_dist, "Graph LSTM", savepath=model_name + "_glstm_output", ymax=0.3)
+    # print("Plotting distributions …")
+    # plot_helper.plot_distribution(glstm_dist, "Graph LSTM", savepath=model_name + "_glstm_output", ymax=0.3)
     # plot_helper.plot_distribution(dpren_dist, "DeepPrior+REN", savepath=model_name + "_dpren_output", ymax=250, ymin=0)
     # plot_helper.plot_distribution(network_dist, "Full network", savepath=model_name + "_net_output", ymax=250, ymin=0)
     # plot_helper.plot_distribution(network_dist, "Full network", savepath=model_name + "_net_output_small", ymax=250, ymin=0, xticks=(0, 50, 100), figsize=(3,2))
-    print("done.")
+    # print("done.")
+
+    # print("Plotting histograms …")
+    # plot_helper.plot_histogram_continuous(val_glstm_hist, "Graph LSTM", plot_normal=True)
+    # plot_helper.plot_histogram_continuous(val_network_hist, "Full network", plot_normal=True, xmax=250, xmin=-100)
+    # plot_helper.plot_histogram_continuous(val_dpren_hist, "DeepPrior+REN", plot_normal=True, xmax=250, xmin=-100)
+
+    # plot_helper.plot_histogram_continuous(dpren_hist, "DeepPrior+REN", plot_normal=True, xmax=250, xmin=0)
+    # plot_helper.plot_histogram_continuous_sampled(glstm_hist, "DeepPrior+REN", plot_normal=True)
+    # print("Done.")
 
     # plot_helper.plot_histogram_continuous(a, "Graph LSTM", data_epochs=100)#, savepath="/home/matthias/testdist2")
