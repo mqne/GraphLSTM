@@ -212,50 +212,27 @@ def plot_histogram_continuous(histogram, name, xmin=-0.5, xmax=0.5, xticks=11, y
     var = np.average((np.array(x) - mean) ** 2, weights=y)
     std = np.sqrt(var)
 
-    # put x,y pairs in lists corresponding to their distance in stds from the mean
+    # put x,y pairs in lists corresponding to their distance in standard deviations from the mean for plotting
     Xy = namedtuple('Xy', 'x,y')
     meanxy = Xy(mean, np.interp(mean, x, y))
-    std1 = Xy([], [])
-    std2 = Xy([], [])
-    std3 = Xy([], [])
+    std05 = Xy([], [])
+    std10 = Xy([], [])
+    std15 = Xy([], [])
     inf = Xy([], [])
 
-    # also gather data for statistics
-    pointonerange = Xy([], [])
-    mm1range = Xy([], [])
-    mm5range = Xy([], [])
-    cm1range = Xy([], [])
-    cm2range = Xy([], [])
-    # 1 mm is how many units
-    mm = 1/mm_per_unit
     for xi, yi in zip(x, y):
         d = np.abs(mean - xi)
+        if d <= 0.5*std:
+            std05.x.append(xi)
+            std05.y.append(yi)
         if d <= std:
-            std1.x.append(xi)
-            std1.y.append(yi)
-        if d <= 2*std:
-            std2.x.append(xi)
-            std2.y.append(yi)
-        if d <= 3*std:
-            std3.x.append(xi)
-            std3.y.append(yi)
+            std10.x.append(xi)
+            std10.y.append(yi)
+        if d <= 1.5*std:
+            std15.x.append(xi)
+            std15.y.append(yi)
         inf.x.append(xi)
         inf.y.append(yi)
-        if -0.1 <= xi <= 0.1:
-            pointonerange.x.append(xi)
-            pointonerange.y.append(yi)
-        if -1*mm <= xi <= 1*mm:
-            mm1range.x.append(xi)
-            mm1range.y.append(yi)
-        if -5*mm <= xi <= 5*mm:
-            mm5range.x.append(xi)
-            mm5range.y.append(yi)
-        if -10*mm <= xi <= 10*mm:
-            cm1range.x.append(xi)
-            cm1range.y.append(yi)
-        if -20*mm <= xi <= 20*mm:
-            cm2range.x.append(xi)
-            cm2range.y.append(yi)
 
     y_sum = cumtrapz(y, x)
     i_mean = None
@@ -278,30 +255,40 @@ def plot_histogram_continuous(histogram, name, xmin=-0.5, xmax=0.5, xticks=11, y
         y_sum_dist[len(y_sum_pos_part):] = [1] * len(y_sum_dist[len(y_sum_pos_part):])
 
     # now y_sum_dist contains the fraction of samples between mean and index i at each index
-    index_step_distance = (xmax - xmin) / num_samples
 
-    result_text = []
+    # gather information about the distribution
+    result_text = list()
 
+    result_text.append(name + " output, epochs " + str(plot_start_epoch) + " to " + str(plot_end_epoch))
+    result_text.append('')
+    result_text.append("1 raw unit ~ " + str(mm_per_unit) + " mm")
     result_text.append("Mean:   " + str(mean * mm_per_unit) + "\tmm, in raw units: " + str(mean))
     result_text.append("1 std ~ " + str(std * mm_per_unit) + "\tmm, in raw units: " + str(std))
-    result_text.append("Samples within\t1 std:\t\t" + str((trapz(std1.y, std1.x) * 100)) + " %")
-    result_text.append("Samples within\t2 std:\t\t" + str((trapz(std2.y, std2.x) * 100)) + " %")
-    result_text.append("Samples within\t3 std:\t\t" + str((trapz(std3.y, std3.x) * 100)) + " %")
-    result_text.append("Samples within\t(-0.1, 0.1):\t" + str((trapz(pointonerange.y, pointonerange.x) * 100)) + " %")
-    result_text.append("Samples within\t1 mm:\t\t" + str((trapz(mm1range.y, mm1range.x) * 100)) + " %")
-    result_text.append("Samples within\t5 mm:\t\t" + str((trapz(mm5range.y, mm5range.x) * 100)) + " %")
-    result_text.append("Samples within\t1 cm:\t\t" + str((trapz(cm1range.y, cm1range.x) * 100)) + " %")
-    result_text.append("Samples within\t2 cm:\t\t" + str((trapz(cm2range.y, cm2range.x) * 100)) + " %")
+    result_text.append('')
 
+    index_step_distance = (xmax - xmin) / num_samples
+    # samples within x standard deviations
+    for stdfrac in (0.5, 1., 1.5, 2., 2.5, 3., 4., 5.):
+        perc = np.interp(stdfrac * std * mm_per_unit,
+                             np.array(list(range(len(y_sum_dist)))) * index_step_distance * mm_per_unit, np.array(y_sum_dist) * 100)
+        result_text.append("Samples within\t" + str(stdfrac) + " std:\t" + str(perc) + " %")
+    result_text.append('')
+    # samples within x millimetres
+    for mms in (1, 2, 5, 10, 15, 20, 30, 50, 100):
+        perc = np.interp(mms,
+                             np.array(list(range(len(y_sum_dist)))) * index_step_distance * mm_per_unit, np.array(y_sum_dist) * 100)
+        result_text.append("Samples within\t" + str(mms) + " mm:\t\t" + str(perc) + " %")
+    result_text.append('')
+    # distance within which x percent of samples lie
     for perc in (1, 2, 3, 5, 10, 20, 25, 50, 80, 90):
         distance = np.interp(perc/100, y_sum_dist, np.array(list(range(len(y_sum_dist))))) * index_step_distance * mm_per_unit
         result_text.append(str(perc) + " %\tof values lie within\t" + str(distance) + "\tmm of the mean")
 
     # plot regions coloured by standard deviations from mean (1, 2, 3, rest)
     plt.fill_between(inf.x, inf.y, color=TumColours.SecondaryBlue_20, linewidth=0.0, zorder=-50)
-    plt.fill_between(std3.x, std3.y, color=TumColours.XSecondaryBlue_35, linewidth=0.0, zorder=-40)
-    plt.fill_between(std2.x, std2.y, color=TumColours.SecondaryBlue_50, linewidth=0.0, zorder=-20)
-    plt.fill_between(std1.x, std1.y, color=TumColours.XSecondaryBlue_65, linewidth=0.0, zorder=-10)
+    plt.fill_between(std15.x, std15.y, color=TumColours.XSecondaryBlue_35, linewidth=0.0, zorder=-40)
+    plt.fill_between(std10.x, std10.y, color=TumColours.SecondaryBlue_50, linewidth=0.0, zorder=-20)
+    plt.fill_between(std05.x, std05.y, color=TumColours.XSecondaryBlue_65, linewidth=0.0, zorder=-10)
 
     # plot estimated corresponding normal distribution
     if plot_normal:
@@ -313,7 +300,6 @@ def plot_histogram_continuous(histogram, name, xmin=-0.5, xmax=0.5, xticks=11, y
 
     # plot line indicating the median
     plt.axvline(meanxy.x, color=TumColours.SecondaryBlue, zorder=-5)
-    # plt.plot([meanxy.x]*2, [ymin, ymax], color=TumColours.SecondaryBlue, zorder=-5)
     plt.fill_between(x, y, ymax, color='white', linewidth=0.0, zorder=0)
 
     plt.xticks(np.linspace(xmin, xmax, xticks))
@@ -333,7 +319,6 @@ def plot_histogram_continuous(histogram, name, xmin=-0.5, xmax=0.5, xticks=11, y
         plt.savefig(savepath + ".pdf")
         plt.savefig(savepath + ".png", dpi=300)
         with open(savepath + '.txt', 'a') as f:
-            f.write("Epochs %i through %i\n" % (plot_start_epoch, plot_end_epoch))
             for line in result_text:
                 f.write(line + '\n')
     else:

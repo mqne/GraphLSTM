@@ -64,17 +64,17 @@ if __name__ == '__main__':
         loss = pd.load(open(data_dir + model_name + loss_1_suffix, 'rb'))
 
     # distributions
-    glstm_dist = pd.load(open(data_dir + model_name + glstm_comp_hist_suffix, 'rb'))
-    dpren_dist = pd.load(open(data_dir + model_name + dpren_comp_hist_suffix, 'rb'))
-    network_dist = pd.load(open(data_dir + model_name + network_comp_hist_suffix, 'rb'))
-
-    # histograms
-    val_glstm_hist = pd.load(open(data_dir + model_name + val_glstm_hist_suffix, 'rb'))
-    val_network_hist = pd.load(open(data_dir + model_name + val_network_hist_suffix, 'rb'))
-    val_dpren_hist = pd.load(open(data_dir + model_name + val_dpren_hist_suffix, 'rb'))
-
-    dpren_hist = pd.load(open(data_dir + model_name + dpren_hist_suffix, 'rb'))
-    glstm_hist = pd.load(open(data_dir + model_name + glstm_hist_suffix, 'rb'))
+    # glstm_dist = pd.load(open(data_dir + model_name + glstm_comp_hist_suffix, 'rb'))
+    # dpren_dist = pd.load(open(data_dir + model_name + dpren_comp_hist_suffix, 'rb'))
+    # network_dist = pd.load(open(data_dir + model_name + network_comp_hist_suffix, 'rb'))
+#
+    # # histograms
+    # val_glstm_hist = pd.load(open(data_dir + model_name + val_glstm_hist_suffix, 'rb'))
+    # val_network_hist = pd.load(open(data_dir + model_name + val_network_hist_suffix, 'rb'))
+    # val_dpren_hist = pd.load(open(data_dir + model_name + val_dpren_hist_suffix, 'rb'))
+#
+    # dpren_hist = pd.load(open(data_dir + model_name + dpren_hist_suffix, 'rb'))
+    # glstm_hist = pd.load(open(data_dir + model_name + glstm_hist_suffix, 'rb'))
     network_hist = pd.load(open(data_dir + model_name + network_hist_suffix, 'rb'))
 
     print("done.")
@@ -98,14 +98,17 @@ if __name__ == '__main__':
     # plot_helper.plot_histogram_continuous(val_network_hist, "Full network", plot_normal=True, xmax=250, xmin=-100)
     # plot_helper.plot_histogram_continuous(val_dpren_hist, "DeepPrior+REN", plot_normal=True, xmax=250, xmin=-100)
 
-    # plot_helper.plot_histogram_continuous(dpren_hist, "DeepPrior+REN", plot_normal=True, xmax=250, xmin=0,
-    #                                       data_epochs=100, plot_start_epoch=40, plot_end_epoch=40,
-    #                                       mm_per_unit=1)
-    plot_helper.plot_histogram_continuous(glstm_hist, "Graph LSTM",
+    plot_helper.plot_histogram_continuous(network_hist, "Network", xmax=250, xmin=0,
                                           data_epochs=100, plot_start_epoch=40, plot_end_epoch=100,
-                                          xmin=-.3, xmax=.3, xticks=7,
-                                          figsize=(plot_helper.PAGEWIDTH_INCHES, 3),
-                                          savepath=model_name + "_glstm_hist")
+                                          mm_per_unit=1)
+    # plot_helper.plot_histogram_continuous(dpren_hist, "DeepPrior+REN", xmax=250, xmin=0,
+    #                                       data_epochs=100, plot_start_epoch=80, plot_end_epoch=100,
+    #                                       mm_per_unit=1)
+    # plot_helper.plot_histogram_continuous(glstm_hist, "Graph LSTM",
+    #                                       data_epochs=100, plot_start_epoch=35, plot_end_epoch=100,
+    #                                       xmin=-.3, xmax=.3, xticks=7,
+    #                                       figsize=(plot_helper.PAGEWIDTH_INCHES, 3),
+    #                                       )#savepath=model_name + "_glstm_hist")
     print("Done.")
 
     # plot_helper.plot_histogram_continuous(a, "Graph LSTM", data_epochs=100)#, savepath="/home/matthias/testdist2")
