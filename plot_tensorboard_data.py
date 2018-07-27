@@ -93,13 +93,19 @@ if __name__ == '__main__':
     # plot_helper.plot_distribution(network_dist, "Full network", savepath=model_name + "_net_output_small", ymax=250, ymin=0, xticks=(0, 50, 100), figsize=(3,2))
     # print("done.")
 
-    # print("Plotting histograms …")
+    print("Plotting histograms …")
     # plot_helper.plot_histogram_continuous(val_glstm_hist, "Graph LSTM", plot_normal=True)
     # plot_helper.plot_histogram_continuous(val_network_hist, "Full network", plot_normal=True, xmax=250, xmin=-100)
     # plot_helper.plot_histogram_continuous(val_dpren_hist, "DeepPrior+REN", plot_normal=True, xmax=250, xmin=-100)
 
-    # plot_helper.plot_histogram_continuous(dpren_hist, "DeepPrior+REN", plot_normal=True, xmax=250, xmin=0)
-    # plot_helper.plot_histogram_continuous_sampled(glstm_hist, "DeepPrior+REN", plot_normal=True)
-    # print("Done.")
+    # plot_helper.plot_histogram_continuous(dpren_hist, "DeepPrior+REN", plot_normal=True, xmax=250, xmin=0,
+    #                                       data_epochs=100, plot_start_epoch=40, plot_end_epoch=40,
+    #                                       mm_per_unit=1)
+    plot_helper.plot_histogram_continuous(glstm_hist, "Graph LSTM",
+                                          data_epochs=100, plot_start_epoch=40, plot_end_epoch=100,
+                                          xmin=-.3, xmax=.3, xticks=7,
+                                          figsize=(plot_helper.PAGEWIDTH_INCHES, 3),
+                                          savepath=model_name + "_glstm_hist")
+    print("Done.")
 
     # plot_helper.plot_histogram_continuous(a, "Graph LSTM", data_epochs=100)#, savepath="/home/matthias/testdist2")

@@ -1,9 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
-from scipy.integrate import trapz
+from scipy.integrate import trapz, cumtrapz
 from scipy.stats import norm
 from tqdm import tqdm
+from collections import namedtuple
 
 from helpers import ErrorCalculator as Ec
 from helpers import HAND_GRAPH_HANDS2017_INDEX_DICT, reverse_dict
@@ -179,7 +180,7 @@ def plot_histogram_discrete_sampled(histogram, name, data_epochs=1, plot_start_e
 
 
 # highest quality, but slowest
-def plot_histogram_continuous(histogram, name, xmin=-0.5, xmax=0.5, xticks=11, ymax=None,
+def plot_histogram_continuous(histogram, name, xmin=-0.5, xmax=0.5, xticks=11, ymax=None, mm_per_unit=137.7863735578566,
                               data_epochs=1, plot_start_epoch=None, plot_end_epoch=None, plot_normal=False,
                               xlabel="output", ylabel="Prediction density", savepath=None, figsize=(5, 2),
                               fontsize=10):
@@ -194,8 +195,9 @@ def plot_histogram_continuous(histogram, name, xmin=-0.5, xmax=0.5, xticks=11, y
     end_index = (-1 + plot_end_epoch + 1) * len(histogram.steps) // data_epochs
 
     # estimate histogram by summing gaussians
-    x = np.linspace(xmin, xmax, 1000)
-    y = np.zeros(1000)
+    num_samples = 1000
+    x = np.linspace(xmin, xmax, num_samples)
+    y = np.zeros(num_samples)
     for hs in tqdm(range(start_index, end_index), desc="Calculating Gaussians for histogram", leave=False, unit=' histslices'):
         for i in range(len(histogram.steps[hs].bucket_low_limit) - 2):
             y_norm = norm.pdf(x,
@@ -205,29 +207,138 @@ def plot_histogram_continuous(histogram, name, xmin=-0.5, xmax=0.5, xticks=11, y
             y += y_norm * histogram.steps[hs].bucket_filling[i + 1]
     y /= trapz(y, x)
 
-    plt.fill_between(x, y, color=TumColours.SecondaryBlue_80, linewidth=0.0)
+    # divide into separate regions by standard deviation
+    mean = np.average(x, weights=y)
+    var = np.average((np.array(x) - mean) ** 2, weights=y)
+    std = np.sqrt(var)
+
+    # put x,y pairs in lists corresponding to their distance in stds from the mean
+    Xy = namedtuple('Xy', 'x,y')
+    meanxy = Xy(mean, np.interp(mean, x, y))
+    std1 = Xy([], [])
+    std2 = Xy([], [])
+    std3 = Xy([], [])
+    inf = Xy([], [])
+
+    # also gather data for statistics
+    pointonerange = Xy([], [])
+    mm1range = Xy([], [])
+    mm5range = Xy([], [])
+    cm1range = Xy([], [])
+    cm2range = Xy([], [])
+    # 1 mm is how many units
+    mm = 1/mm_per_unit
+    for xi, yi in zip(x, y):
+        d = np.abs(mean - xi)
+        if d <= std:
+            std1.x.append(xi)
+            std1.y.append(yi)
+        if d <= 2*std:
+            std2.x.append(xi)
+            std2.y.append(yi)
+        if d <= 3*std:
+            std3.x.append(xi)
+            std3.y.append(yi)
+        inf.x.append(xi)
+        inf.y.append(yi)
+        if -0.1 <= xi <= 0.1:
+            pointonerange.x.append(xi)
+            pointonerange.y.append(yi)
+        if -1*mm <= xi <= 1*mm:
+            mm1range.x.append(xi)
+            mm1range.y.append(yi)
+        if -5*mm <= xi <= 5*mm:
+            mm5range.x.append(xi)
+            mm5range.y.append(yi)
+        if -10*mm <= xi <= 10*mm:
+            cm1range.x.append(xi)
+            cm1range.y.append(yi)
+        if -20*mm <= xi <= 20*mm:
+            cm2range.x.append(xi)
+            cm2range.y.append(yi)
+
+    y_sum = cumtrapz(y, x)
+    i_mean = None
+    for i in range(len(x)):
+        if x[i] >= mean:
+            i_mean = i
+            break
+    y_sum_pos_part = y_sum[i_mean:]
+    y_sum_pos_part -= y_sum_pos_part[0]
+    y_sum_neg_part = y_sum[:i_mean][::-1]
+    y_sum_neg_part = list(- y_sum_neg_part + y_sum_neg_part[0])
+    y_sum_neg_part.insert(0, 0)
+    if len(y_sum_neg_part) < len(y_sum_pos_part):
+        y_sum_dist = y_sum_pos_part.copy()
+        y_sum_dist[:len(y_sum_neg_part)] += y_sum_neg_part
+        y_sum_dist[len(y_sum_neg_part):] = [1] * len(y_sum_dist[len(y_sum_neg_part):])
+    else:
+        y_sum_dist = y_sum_neg_part.copy()
+        y_sum_dist[:len(y_sum_pos_part)] += y_sum_pos_part
+        y_sum_dist[len(y_sum_pos_part):] = [1] * len(y_sum_dist[len(y_sum_pos_part):])
+
+    # now y_sum_dist contains the fraction of samples between mean and index i at each index
+    index_step_distance = (xmax - xmin) / num_samples
+
+    result_text = []
+
+    result_text.append("Mean:   " + str(mean * mm_per_unit) + "\tmm, in raw units: " + str(mean))
+    result_text.append("1 std ~ " + str(std * mm_per_unit) + "\tmm, in raw units: " + str(std))
+    result_text.append("Samples within\t1 std:\t\t" + str((trapz(std1.y, std1.x) * 100)) + " %")
+    result_text.append("Samples within\t2 std:\t\t" + str((trapz(std2.y, std2.x) * 100)) + " %")
+    result_text.append("Samples within\t3 std:\t\t" + str((trapz(std3.y, std3.x) * 100)) + " %")
+    result_text.append("Samples within\t(-0.1, 0.1):\t" + str((trapz(pointonerange.y, pointonerange.x) * 100)) + " %")
+    result_text.append("Samples within\t1 mm:\t\t" + str((trapz(mm1range.y, mm1range.x) * 100)) + " %")
+    result_text.append("Samples within\t5 mm:\t\t" + str((trapz(mm5range.y, mm5range.x) * 100)) + " %")
+    result_text.append("Samples within\t1 cm:\t\t" + str((trapz(cm1range.y, cm1range.x) * 100)) + " %")
+    result_text.append("Samples within\t2 cm:\t\t" + str((trapz(cm2range.y, cm2range.x) * 100)) + " %")
+
+    for perc in (1, 2, 3, 5, 10, 20, 25, 50, 80, 90):
+        distance = np.interp(perc/100, y_sum_dist, np.array(list(range(len(y_sum_dist))))) * index_step_distance * mm_per_unit
+        result_text.append(str(perc) + " %\tof values lie within\t" + str(distance) + "\tmm of the mean")
+
+    # plot regions coloured by standard deviations from mean (1, 2, 3, rest)
+    plt.fill_between(inf.x, inf.y, color=TumColours.SecondaryBlue_20, linewidth=0.0, zorder=-50)
+    plt.fill_between(std3.x, std3.y, color=TumColours.XSecondaryBlue_35, linewidth=0.0, zorder=-40)
+    plt.fill_between(std2.x, std2.y, color=TumColours.SecondaryBlue_50, linewidth=0.0, zorder=-20)
+    plt.fill_between(std1.x, std1.y, color=TumColours.XSecondaryBlue_65, linewidth=0.0, zorder=-10)
 
     # plot estimated corresponding normal distribution
     if plot_normal:
-        mean = np.average(x, weights=y)
-        var = np.average((np.array(x) - mean) ** 2, weights=y)
-        std = np.sqrt(var)
         y_norm = norm.pdf(x, mean, std)
         plt.plot(x, y_norm, color=TumColours.AccentGray)
 
     plt.xlim(xmin, xmax)
-    plt.ylim(0, ymax)
+    ymin, ymax = plt.ylim(0, ymax)
+
+    # plot line indicating the median
+    plt.axvline(meanxy.x, color=TumColours.SecondaryBlue, zorder=-5)
+    # plt.plot([meanxy.x]*2, [ymin, ymax], color=TumColours.SecondaryBlue, zorder=-5)
+    plt.fill_between(x, y, ymax, color='white', linewidth=0.0, zorder=0)
 
     plt.xticks(np.linspace(xmin, xmax, xticks))
 
     plt.xlabel(name + ' ' + xlabel)
     plt.ylabel(ylabel)
 
+    if np.maximum(y[0], y[-1]) > 0.001:
+        print("\nWARNING: significant Y values at plot edge detected. Mean and std evaluation and plotting might be inaccurate.\n"
+              "Try plotting again with more permissive 'xmin' and/or 'xmax' limits.\n")
+        result_warning = "THESE VALUES ARE INACCURATE. PLOT AGAIN WITH MORE PERMISSIVE xmin/xmax LIMITS."
+        result_text.append(result_warning)
+        result_text.insert(0, result_warning)
+
     if savepath is not None:
         plt.savefig(savepath + ".pgf")
         plt.savefig(savepath + ".pdf")
         plt.savefig(savepath + ".png", dpi=300)
+        with open(savepath + '.txt', 'a') as f:
+            f.write("Epochs %i through %i\n" % (plot_start_epoch, plot_end_epoch))
+            for line in result_text:
+                f.write(line + '\n')
     else:
+        for line in result_text:
+            print(line)
         plt.show()
     plt.close()
     plt.rc('font', size=plt.rcParamsDefault['font.size'])
