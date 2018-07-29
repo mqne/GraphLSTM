@@ -492,7 +492,7 @@ def plot_histogram_analytical(histogram, name, xmin=-0.5, xmax=0.5, xticks=11, y
 
 # plot cumulative error across validation frames
 def plot_accuracy_curve(individual_errors, xlabel, ylabel, legend=None, savepath=None, figsize=(5, 3), max_err=40, fontsize=10,
-                        colours=None, percentages_below=(1, 2, 5, 10, 20, 50, 80, 90, 95, 98, 99)):
+                        colours=None, percentages_below=(1, 2, 5, 10, 20, 50, 80, 90, 95, 98, 99), mm_below=()):
     individual_errors = make_tuple(individual_errors)
     if colours is not None:
         colours = make_tuple(colours)
@@ -535,8 +535,11 @@ def plot_accuracy_curve(individual_errors, xlabel, ylabel, legend=None, savepath
         for perc in percentages_below:
             mm = np.interp(perc, y_span, sorted_errors_full)
             model_text.append('%2i' % perc + '% of prediction errors are below' + ' %f mm' % mm)
-        model_text.append('')
         perc_text.append(model_text)
+        for mm in mm_below:
+            perc = np.interp(mm, sorted_errors_full, y_span)
+            model_text.append('%f' % perc + ' %\tof prediction errors are below' + ' %f mm' % mm)
+        model_text.append('')
 
     plt.xlim(0, max_err)
     plt.ylim(0, 100)
@@ -590,7 +593,8 @@ def plot_ratio_of_joints_within_bound(individual_errors, xlabel=r'Joint Error (m
                                       legend=None,
                                       savepath=None, figsize=(5, 3), max_err=40, fontsize=10,
                                       colours=None,
-                                      percentages_below=(1, 2, 5, 10, 20, 50, 80, 90, 95, 98, 99)):
+                                      percentages_below=(1, 2, 5, 10, 20, 50, 80, 90, 95, 98, 99),
+                                      mm_below=()):
     plot_accuracy_curve([Ec.per_frame_and_joint(x).flatten() for x in individual_errors],
                         xlabel=xlabel,
                         ylabel=ylabel,
@@ -600,7 +604,8 @@ def plot_ratio_of_joints_within_bound(individual_errors, xlabel=r'Joint Error (m
                         max_err=max_err,
                         fontsize=fontsize,
                         colours=colours,
-                        percentages_below=percentages_below)
+                        percentages_below=percentages_below,
+                        mm_below=mm_below)
 
 
 # standard error metric 3 from hands2017 paper
@@ -610,7 +615,8 @@ def plot_ratio_of_frames_with_all_joints_within_bound(individual_errors, xlabel=
                                                       max_err=40,
                                                       fontsize=10,
                                                       colours=None,
-                                                      percentages_below=(1, 2, 5, 10, 20, 50, 80, 90, 95, 98, 99)):
+                                                      percentages_below=(1, 2, 5, 10, 20, 50, 80, 90, 95, 98, 99),
+                                                      mm_below=()):
     plot_accuracy_curve([np.amax(Ec.per_frame_and_joint(x), axis=1) for x in individual_errors],
                         xlabel=xlabel,
                         ylabel=ylabel,
@@ -620,7 +626,8 @@ def plot_ratio_of_frames_with_all_joints_within_bound(individual_errors, xlabel=
                         max_err=max_err,
                         fontsize=fontsize,
                         colours=colours,
-                        percentages_below=percentages_below)
+                        percentages_below=percentages_below,
+                        mm_below=mm_below)
 
 
 # positions of joints in the violin plot when grouped by joint type (wrist, MCP, PIP, DIP, TIP)
