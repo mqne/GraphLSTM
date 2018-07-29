@@ -182,6 +182,7 @@ def plot_histogram_discrete_sampled(histogram, name, data_epochs=1, plot_start_e
 # highest quality, but slowest
 def plot_histogram_continuous(histogram, name, xmin=-0.5, xmax=0.5, xticks=11, ymax=None, mm_per_unit=137.7863735578566,
                               data_epochs=1, plot_start_epoch=None, plot_end_epoch=None, plot_normal=False,
+                              additional_mms_to_be_evaluated=tuple(),
                               xlabel="output", ylabel="Prediction density", savepath=None, figsize=(5, 2),
                               fontsize=10):
     plt.rc('font', size=fontsize)
@@ -283,7 +284,12 @@ def plot_histogram_continuous(histogram, name, xmin=-0.5, xmax=0.5, xticks=11, y
     for perc in (1, 2, 3, 5, 10, 20, 25, 50, 80, 90):
         distance = np.interp(perc/100, y_sum_dist, np.array(list(range(len(y_sum_dist))))) * index_step_distance * mm_per_unit
         result_text.append(str(perc) + " %\tof values lie within\t" + str(distance) + "\tmm of the mean")
-
+    # optional: samples within mms in additional_mms_to_be_evaluated
+    for mms in additional_mms_to_be_evaluated:
+        result_text.append('')
+        perc = np.interp(mms,
+                             np.array(list(range(len(y_sum_dist)))) * index_step_distance * mm_per_unit, np.array(y_sum_dist) * 100)
+        result_text.append("Samples within\t" + str(mms) + " mm:\t\t" + str(perc) + " %")
     # plot regions coloured by standard deviations from mean (1, 2, 3, rest)
     plt.fill_between(inf.x, inf.y, color=TumColours.SecondaryBlue_20, linewidth=0.0, zorder=-50)
     plt.fill_between(std15.x, std15.y, color=TumColours.XSecondaryBlue_35, linewidth=0.0, zorder=-40)
@@ -486,7 +492,7 @@ def plot_histogram_analytical(histogram, name, xmin=-0.5, xmax=0.5, xticks=11, y
 
 # plot cumulative error across validation frames
 def plot_accuracy_curve(individual_errors, xlabel, ylabel, legend=None, savepath=None, figsize=(5, 3), max_err=40, fontsize=10,
-                        colours=None):
+                        colours=None, percentages_below=(1, 2, 5, 10, 20, 50, 80, 90, 95, 98, 99)):
     individual_errors = make_tuple(individual_errors)
     if colours is not None:
         colours = make_tuple(colours)
@@ -514,13 +520,23 @@ def plot_accuracy_curve(individual_errors, xlabel, ylabel, legend=None, savepath
     plt.rc('font', size=fontsize)
     plt.figure(num=None, figsize=figsize)
 
+    perc_text = []
+
     for err, colour in zip(individual_errors, colours):
-        sorted_errors = np.sort(err)
+        sorted_errors_full = np.sort(err)
         # prevent memory exhaustion
-        sorted_errors = sorted_errors[::len(sorted_errors) // 10000 + 1]
+        sorted_errors = sorted_errors_full[::len(sorted_errors_full) // 10000 + 1]
         y = np.linspace(0, 100, len(sorted_errors) + 1)
         x = np.append(sorted_errors, sorted_errors[-1])
         plt.step(x, y, color=colour)
+        # calculate some percentages below x
+        model_text = []
+        y_span = np.linspace(0, 100, len(sorted_errors_full))
+        for perc in percentages_below:
+            mm = np.interp(perc, y_span, sorted_errors_full)
+            model_text.append('%2i' % perc + '% of prediction errors are below' + ' %f mm' % mm)
+        model_text.append('')
+        perc_text.append(model_text)
 
     plt.xlim(0, max_err)
     plt.ylim(0, 100)
@@ -530,12 +546,23 @@ def plot_accuracy_curve(individual_errors, xlabel, ylabel, legend=None, savepath
 
     if legend is not None:
         plt.legend(legend, fancybox=False, edgecolor=TumColours.LightGray)
+        for name, textlist in zip(legend, perc_text):
+            textlist.insert(0, str(name) + ':\n')
+
+    result_text = ''
+    for model_text in perc_text:
+        for line in model_text:
+            result_text += line + '\n'
+        result_text += '\n'
 
     if savepath is not None:
+        with open(savepath + '.txt', 'a') as f:
+            f.write(result_text)
         plt.savefig(savepath + ".pgf")
         plt.savefig(savepath + ".pdf")
         plt.savefig(savepath + ".png", dpi=300)
     else:
+        print(result_text)
         plt.show()
     plt.close()
     plt.rc('font', size=plt.rcParamsDefault['font.size'])
@@ -562,7 +589,8 @@ def plot_average_frame_error(errors, xlabel=r'Average Joint Error (mm)', ylabel=
 def plot_ratio_of_joints_within_bound(individual_errors, xlabel=r'Joint Error (mm)', ylabel=r'No.\ of Joints (\%)',
                                       legend=None,
                                       savepath=None, figsize=(5, 3), max_err=40, fontsize=10,
-                                      colours=None):
+                                      colours=None,
+                                      percentages_below=(1, 2, 5, 10, 20, 50, 80, 90, 95, 98, 99)):
     plot_accuracy_curve([Ec.per_frame_and_joint(x).flatten() for x in individual_errors],
                         xlabel=xlabel,
                         ylabel=ylabel,
@@ -571,7 +599,8 @@ def plot_ratio_of_joints_within_bound(individual_errors, xlabel=r'Joint Error (m
                         figsize=figsize,
                         max_err=max_err,
                         fontsize=fontsize,
-                        colours=colours)
+                        colours=colours,
+                        percentages_below=percentages_below)
 
 
 # standard error metric 3 from hands2017 paper
@@ -580,7 +609,8 @@ def plot_ratio_of_frames_with_all_joints_within_bound(individual_errors, xlabel=
                                                       ylabel=r'No.\ of Frames (\%)', savepath=None, figsize=(5, 3),
                                                       max_err=40,
                                                       fontsize=10,
-                                                      colours=None):
+                                                      colours=None,
+                                                      percentages_below=(1, 2, 5, 10, 20, 50, 80, 90, 95, 98, 99)):
     plot_accuracy_curve([np.amax(Ec.per_frame_and_joint(x), axis=1) for x in individual_errors],
                         xlabel=xlabel,
                         ylabel=ylabel,
@@ -589,7 +619,8 @@ def plot_ratio_of_frames_with_all_joints_within_bound(individual_errors, xlabel=
                         figsize=figsize,
                         max_err=max_err,
                         fontsize=fontsize,
-                        colours=colours)
+                        colours=colours,
+                        percentages_below=percentages_below)
 
 
 # positions of joints in the violin plot when grouped by joint type (wrist, MCP, PIP, DIP, TIP)
