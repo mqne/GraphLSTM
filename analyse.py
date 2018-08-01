@@ -72,7 +72,7 @@ def clean_read_names_and_labels_from_file(path):
     combined_list = [s.split(',') for s in combined_list if not s.startswith(('#',))]
     if len(combined_list) == 0:
         raise LookupError("File seems to contain no entries.")
-    names, labels = zip(*combined_list)
+    names, labels = tuple(zip(*combined_list))[:2]
     return tuple([s.strip() for s in names]), tuple([s.strip() for s in labels])
 
 
@@ -154,12 +154,18 @@ def analyse_regular(individual_errors_list, labels, prefix='', colours=None):
     plot_helper.plot_ratio_of_joints_within_bound(individual_errors_list,
                                                   legend=labels,
                                                   savepath=save_path + prefix + "measure2",
-                                                  colours=colours)
+                                                  colours=colours,
+                                                  # figsize=(plot_helper.PAGEWIDTH_INCHES, 3),
+                                                  # mm_below=(6.550006, 6.5, 6.6),
+                                                  )
     # hands2017 error measure 3
     plot_helper.plot_ratio_of_frames_with_all_joints_within_bound(individual_errors_list,
                                                                   legend=labels,
                                                                   savepath=save_path + prefix + "measure3",
-                                                                  colours=colours)
+                                                                  colours=colours,
+                                                                  # figsize=(plot_helper.PAGEWIDTH_INCHES, 3),
+                                                                  # mm_below=(6.8,6.9,7.0,7.1,7.2,7.3,7.4,7.5,7.6),
+                                                                  )
 
 
 def hyp_colour_gen():
@@ -299,6 +305,13 @@ elif is_mhp:
                 s = joint + '\t' + str(std)
                 f.write(s + '\n')
             f.write('\n')
+
+    plot_helper.plot_joint_variances(joint_indices_ranked_by_std_list,
+                                     model_name_list=npy_labels,
+                                     # show_wrist_first=True,
+                                     savepath=save_path + "joint_rank_plot",
+                                     figsize=(plot_helper.PAGEWIDTH_INCHES, 2.2)
+                                     )
 
     for label, label_errors in zip(npy_labels, individual_hypotheses_errors_list):
         label_errors = np.swapaxes(label_errors, 0, 1)

@@ -50,6 +50,19 @@ PlotColours = {
     10: TumColours.SecondaryBlue2_50
 }
 
+JointColours = {
+    1: TumColours.Blue,
+    4: TumColours.AccentOrange,
+    5: TumColours.SecondaryBlue2,
+    2: TumColours.AccentBlue,
+    3: TumColours.Gray,
+    9: TumColours.XSecondaryBlue_65,
+    7: TumColours.SecondaryBlue_80,
+    8: TumColours.XSecondaryBlue_35,
+    6: TumColours.AccentLightBlue,
+    10: TumColours.SecondaryBlue2_50
+}
+
 # pagewidth of text in thesis, obtained by LaTeX: \printinunitsof{in}\prntlen{\textwidth}
 PAGEWIDTH_INCHES = 5.78853
 
@@ -61,6 +74,7 @@ def set_thesis_style():
                                   r'\linespread{1.05}'
                                   r'\usepackage[utf8]{inputenc}'
                                   r'\usepackage[final]{microtype}'
+                                  r'\linespread{1.05}'
            )
     plt.rc('font', family='serif')
     plt.rc('pgf', rcfonts=False)
@@ -535,11 +549,12 @@ def plot_accuracy_curve(individual_errors, xlabel, ylabel, legend=None, savepath
         for perc in percentages_below:
             mm = np.interp(perc, y_span, sorted_errors_full)
             model_text.append('%2i' % perc + '% of prediction errors are below' + ' %f mm' % mm)
-        perc_text.append(model_text)
         for mm in mm_below:
             perc = np.interp(mm, sorted_errors_full, y_span)
             model_text.append('%f' % perc + ' %\tof prediction errors are below' + ' %f mm' % mm)
+        model_text.append('Mean error: ' + str(np.mean(sorted_errors_full)) + ' mm')
         model_text.append('')
+        perc_text.append(model_text)
 
     plt.xlim(0, max_err)
     plt.ylim(0, 100)
@@ -548,7 +563,7 @@ def plot_accuracy_curve(individual_errors, xlabel, ylabel, legend=None, savepath
     plt.ylabel(ylabel)
 
     if legend is not None:
-        plt.legend(legend, fancybox=False, edgecolor=TumColours.LightGray)
+        plt.legend(legend, fancybox=False, edgecolor=TumColours.LightGray, loc=4)
         for name, textlist in zip(legend, perc_text):
             textlist.insert(0, str(name) + ':\n')
 
@@ -688,6 +703,92 @@ def violinplot_error_per_joint(individual_errors,
 
     plt.ylim(0, max_err)
     plt.ylabel(ylabel)
+
+    if savepath is not None:
+        plt.savefig(savepath + ".pgf")
+        plt.savefig(savepath + ".pdf")
+        plt.savefig(savepath + ".png", dpi=300)
+    else:
+        plt.show()
+    plt.close()
+    plt.rc('font', size=plt.rcParamsDefault['font.size'])
+
+
+def plot_joint_variances(joint_indices_ranked_by_std_list,
+                         model_name_list=None,
+                         index_dict=HAND_GRAPH_HANDS2017_INDEX_DICT,
+                         show_wrist_first=False,
+                         show_tips_first=False,
+                         xlabel='Update order \(\longrightarrow\)',
+                         savepath=None,
+                         figsize=(PAGEWIDTH_INCHES, 2.5),
+                         fontsize=10):
+    index_order_wrist_first = [0, 1, 2, 3, 4, 5, 6, 9, 12, 15, 18, 7, 10, 13, 16, 19, 8, 11, 14, 17, 20]
+    name_wrist_first = "Wrist first"
+    index_order_tips_first = list(reversed(index_order_wrist_first))
+    name_tips_first = "Tips first"
+
+    joint_indices_ranked_by_std_list = np.array(joint_indices_ranked_by_std_list)
+
+    node_dict = reverse_dict(index_dict)
+    labels = [node_dict[i] for i in range(len(index_dict))]
+    assert len(labels) == len(joint_indices_ranked_by_std_list[0])
+
+    yticks = np.linspace(1, len(joint_indices_ranked_by_std_list), len(joint_indices_ranked_by_std_list))
+
+    if model_name_list is not None:
+        assert len(model_name_list) == len(joint_indices_ranked_by_std_list)
+        yticklabels = model_name_list
+    else:
+        yticklabels = ['Model %i' % i for i in yticks]
+
+    if show_tips_first:
+        yticklabels = np.append(yticklabels, name_tips_first)
+        yticks = np.append(yticks, yticks[-1] + 1)
+        joint_indices_ranked_by_std_list = np.append(joint_indices_ranked_by_std_list, [index_order_tips_first], axis=0)
+    if show_wrist_first:
+        yticklabels = np.append(yticklabels, name_wrist_first)
+        yticks = np.append(yticks, yticks[-1] + 1)
+        joint_indices_ranked_by_std_list = np.append(joint_indices_ranked_by_std_list, [index_order_wrist_first], axis=0)
+
+    indices_per_model = joint_indices_ranked_by_std_list.swapaxes(0, 1)
+
+    # For grouping, other joint constellations than hands2017 are not supported in this implementation
+    pos = np.arange(0, len(labels))
+
+    plt.rc('font', size=fontsize)
+    plt.figure(num=None, figsize=figsize, frameon=False)
+    sp = plt.subplot()
+
+    ranking = np.argsort(indices_per_model, axis=0)
+
+    # align joint labels with prediction of uppermost model
+    labels = np.array(labels)[joint_indices_ranked_by_std_list[-1]]
+
+    sp.set_xticks(pos)
+    sp.set_xticklabels(labels, rotation=90)
+
+    sp.grid(axis='x', color=TumColours.LightGray, linewidth=0.3125)
+    sp.tick_params(axis='x', length=figsize[1]*4.5, direction='inout', width=plt.rcParams['lines.linewidth'],
+                   top=True, bottom=False, labeltop=True, labelbottom=False)
+    sp.tick_params(axis='y', left=False)
+
+    sp.set_yticks(yticks)
+    sp.set_yticklabels(yticklabels)
+
+    for i in range(len(ranking)):
+        colour = JointColours[1 + ranking[i][-1] % len(JointColours)]
+        plt.plot(ranking[i], yticks, marker='.', color=colour)
+        sp.xaxis.get_ticklines()[ranking[i][-1]*2+1].set_color(colour)
+        sp.xaxis.get_ticklabels()[ranking[i][-1]].set_color(colour)
+
+    sp.spines['top'].set_visible(False)
+    sp.spines['bottom'].set_visible(False)
+    sp.spines['left'].set_visible(False)
+    sp.spines['right'].set_visible(False)
+
+    # plt.ylim(1, yticks[-1])
+    plt.xlabel(xlabel, labelpad=10)
 
     if savepath is not None:
         plt.savefig(savepath + ".pgf")
