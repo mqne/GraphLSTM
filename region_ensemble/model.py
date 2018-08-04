@@ -229,7 +229,7 @@ def pair_batch_generator(dataset_root, container_name_list, batch_size, shuffle=
 
 
 def image_batch_generator(dataset_root, container_name_list, batch_size, progress_desc=None, leave=False):
-    while True:
+    # while True:
         image_batch_generator_one_epoch(dataset_root=dataset_root, container_name_list=container_name_list,
                                         batch_size=batch_size, progress_desc=progress_desc, leave=leave)
 
@@ -610,6 +610,7 @@ def plot_scatter2d(image, pred=None, true=None):
         name="image",
         z=image,
         showscale=False,
+        # colorscale='Greys',
     )
     data += [image_heatmap]
 

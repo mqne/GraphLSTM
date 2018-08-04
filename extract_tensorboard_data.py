@@ -4,8 +4,6 @@
 import numpy as np
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
-import matplotlib.pyplot as plt
-
 from sys import argv
 from collections import namedtuple
 import pickle as pd
@@ -59,8 +57,6 @@ def get_scalars(event_acc):
 
 
 def get_histograms(event_acc):
-    # to be plotted with plt.plot(h.bucket_low_limit, h.bucket_filling) ; plt.xlim(-1,1) // how handle low limit?
-
     hist_list = []
     for h in event_acc.Tags()['histograms']:
         step_list = [HistogramStep(h, hist_step.step, hist_step[2][5], hist_step[2][6])

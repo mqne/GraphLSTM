@@ -35,6 +35,7 @@ class TumColours:
     XSecondaryBlue_10 = '#e5edf4'
     XSecondaryBlue_35 = '#a6c2d9'
     XSecondaryBlue_65 = '#598eb9'
+    XGrey_65 = '#6d6e6f'
 
 
 PlotColours = {
