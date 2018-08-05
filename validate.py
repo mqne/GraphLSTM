@@ -1,29 +1,20 @@
-import graph_lstm as glstm
+# run a trained network on the test set and collect predictions in a .npy file
+
 import region_ensemble.model as re
 from helpers import *
 
 import tensorflow as tf
 import keras.backend as K
-from keras.optimizers import Adam
-from keras.utils import plot_model
-from keras.callbacks import ModelCheckpoint, TensorBoard
 
 import numpy as np
-import seaborn as sns
-import zipfile
 
-from tqdm import tqdm
 import os
 
-
-# set plot style
-# sns.set_style("whitegrid")
 
 prefix, model_name, epoch = get_prefix_model_name_optionally_epoch()
 
 # dataset path declarations
 
-# prefix = "train-03"
 checkpoint_dir = r"/home/matthias-k/GraphLSTM_data/%s" % prefix
 
 dataset_root = r"/home/matthias-k/datasets/hands2017/data/hand2017_nor_img_new"
@@ -31,15 +22,9 @@ train_and_validate_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)
 
 train_list, validate_list = train_validate_split(train_and_validate_list)
 
-testset_root = r"/data2/datasets/hands2017/data/hand2017_test_0914"
-test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.pkl"]
-
 # number of timesteps to be simulated (each step, the same data is fed)
 graphlstm_timesteps = 2
 learning_rate = 1e-3
-
-#model_name = "regen41_graphlstm1t%i_outputscaling21x3wb_adamlr%f" % (graphlstm_timesteps, learning_rate)
-# model_name = "regen41_graphlstm1t%i_fcrelu4d4d1_adamlr%f_withtensorboardgs" % (graphlstm_timesteps, learning_rate)
 
 checkpoint_dir += r"/%s" % model_name
 tensorboard_dir = checkpoint_dir + r"/tensorboard/validation"
@@ -58,9 +43,6 @@ K.set_session(sess)
 print("\n###   Loading Model: %s   ###\n" % model_name)
 epoch_str = "Last epoch" if epoch is None else ("Epoch %i" % epoch)
 print("##   %s   ##\n" % epoch_str)
-
-# None loads last epoch, int loads specific epoch
-# epoch = None
 
 input_shape = [None, *re.Const.MODEL_IMAGE_SHAPE]
 output_shape = [None, len(HAND_GRAPH_HANDS2017_INDEX_DICT), GLSTM_NUM_UNITS]
@@ -108,8 +90,12 @@ with sess.as_default():
         X = batch
         actual_batch_size = X.shape[0]
         X = X.reshape([actual_batch_size, *input_shape[1:]])
-        # Y = Y.reshape([actual_batch_size, *output_shape[1:]])
         Y_dummy = np.zeros([actual_batch_size, 21, 3])  # necessary as the restored "merged" tensor computes the loss
+
+        # POTENTIAL ERRORS: this script assumes that MHP models use flattened output (63), wheres non-MHP models use
+        # separate output dimensions per joint (21, 3). If an error arises when validating a model, check here.
+        if len(collection) == 7:
+            Y_dummy = Y_dummy.reshape([actual_batch_size, 63])
 
         batch_predictions, summary = sess.run([output_tensor, merged], feed_dict={input_tensor: X,
                                                                                   groundtruth_tensor: Y_dummy,
@@ -131,6 +117,11 @@ print("Storing prediction results at %s …" % npyname)
 
 np.save(tensorboard_dir + "/" + npyname, predictions)
 
+print("Done, exiting.")
+exit(0)
+
+
+# The following is mostly for debugging or quickly seeing the mean error
 
 # # CALCULATE RESULTS
 
@@ -150,10 +141,6 @@ individual_error = np.abs(validate_label - predictions)
 # overall error
 overall_mean_error = ErrorCalculator.overall_mean_error(individual_error)
 
-# np.save(tensorboard_dir + "/individual_error_%s%s.npy" % (model_name,
-#                                                           (("_epoch" + str(epoch)) if epoch is not None else "")),
-#         individual_error)
-
 print("\n# %s" % epoch_str)
 print("Mean prediction error (euclidean):", overall_mean_error)
 
@@ -166,36 +153,3 @@ print("Predicted joints position average:\n%r" % pred_joint_avg)
 print("Validation done.")
 print("Point tensorboard to %s to get more insights. This directory also holds the .npy files for error analysis."
       % tensorboard_dir)
-exit(0)
-
-
-
-
-
-# # Validate
-
-validate_image_batch_gen = re.image_batch_generator(dataset_root, validate_list, re.Const.VALIDATE_BATCH_SIZE)
-
-predictions = region_ensemble_net.predict_generator(
-    validate_image_batch_gen,
-    steps=re.Const.NUM_VALIDATE_BATCHES, verbose=1
-)
-
-# mean absolute error
-validate_label_gen = re.sample_generator(dataset_root, "pose", validate_list)
-validate_label = np.asarray(list(validate_label_gen))
-print("average", np.abs(validate_label - predictions).mean())
-
-
-# # Explore Validate
-
-validate_model_image_gen = re.sample_generator(dataset_root, "image", train_list, resize_to_shape=re.Const.MODEL_IMAGE_SHAPE)
-validate_src_image_gen = re.sample_generator(dataset_root, "image", train_list)
-validate_label_gen = re.sample_generator(dataset_root, "pose", train_list)
-
-validate_model_image = next(validate_model_image_gen)
-validate_src_image = next(validate_src_image_gen)
-validate_label = next(validate_label_gen)
-validate_uvd = region_ensemble_net.predict(np.asarray([validate_model_image]))
-
-re.plot_scatter3d(validate_src_image, pred=validate_uvd, true=validate_label)

@@ -40,9 +40,6 @@ import zipfile
 sns.set_style("whitegrid")
 
 
-# get_ipython().run_line_magic('env', 'CUDA_VISIBLE_DEVICES=1') todo: adapt to non ipython
-
-
 # dataset path declarations
 
 prefix = "01-retest"
@@ -69,7 +66,7 @@ model = re.RegEnModel(directory_prefix=prefix)
 
 model.compile(optimizer=Adam(), loss=re.soft_loss)
 
-# todo: possible before model.compile? If yes: include in _build_model? If no: override model.compile?
+# possible before model.compile? If yes: include in _build_model? If no: override model.compile?
 model.set_pca_bottleneck_weights(pca)
 
 # store PNG image of model

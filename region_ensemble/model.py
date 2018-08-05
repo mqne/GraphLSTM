@@ -21,10 +21,8 @@
 
 
 import matplotlib.pyplot as plt
-import seaborn as sns
-
-# get_ipython().run_line_magic('matplotlib', 'inline')
-#sns.set_style("whitegrid")
+# import seaborn as sns
+# sns.set_style("whitegrid")
 
 # In[2]:
 
@@ -32,12 +30,7 @@ import seaborn as sns
 import plotly.offline as py
 import plotly.graph_objs as go
 
-#py.init_notebook_mode(connected=True)
-
 # In[3]:
-
-
-# get_ipython().run_line_magic('env', 'CUDA_VISIBLE_DEVICES=1') todo: adapt to non ipython
 
 import tensorflow as tf
 from keras.utils import Progbar
@@ -378,7 +371,7 @@ class RegEnModel(Model):
                                 kernel_size=(3, 3),
                                 padding='same',
                                 activation='relu',
-                                )(com)  # todo: this was changed from (image) to (com), as model is probably better that way, but: comparability to Kai's evaluated model?
+                                )(com)  # the original implementation had a bug here, inputting (image) instead of (com)
 
             com = MaxPooling2D(pool_size=(2, 2),
                                padding='same'

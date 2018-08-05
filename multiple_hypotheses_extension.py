@@ -1,11 +1,10 @@
+# a TensorFlow implementation of a fully connected layer extended with MHP
+# MHP paper by Rupprecht et al., 'Learning in an Uncertain World: Representing Ambiguity Through Multiple Hypotheses',
+# ICCV 2017
+
 import tensorflow as tf
 from tensorflow.python.framework import tensor_shape
 
-# kernel_regularizer = tf.contrib.layers.l2_regularizer(re.Const.WEIGHT_DECAY)
-# loss_func = re.soft_loss
-# ground_truth = tf.placeholder ## todo
-#
-# hyp_input = regen_40dim_output_tensor
 
 HYPOTHESES_AXIS = 1
 

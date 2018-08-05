@@ -1,3 +1,5 @@
+# provides functions for plotting error curves and analysis plots
+
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter

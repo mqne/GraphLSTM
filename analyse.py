@@ -1,3 +1,21 @@
+# extracts error statistics and creates plots from .npy prediction files
+
+# CALL SIGNATURE:
+# python analyse.py path_to_npylist.txt [ anything, if given, indicating that overall plots should be created ]
+# examples:
+# normal call:
+# python analyse.py plot_error_list.txt
+# overall plot call:
+# python analyse.py plot_error_list.txt xyz
+
+# .npy files to be analysed are read from a text file which is given as the first command line argument.
+# FILE SYNTAX:
+# PATH                  COMMA   NAME                    [  COMMA        COMMENT  ]
+# /path/to/file.npy     ,       Name used in plots         ,            Comment that will not appear in the plot
+#
+# Empty lines and lines starting with # are ignored
+
+
 from helpers import *
 import plot_helper
 
@@ -7,15 +25,9 @@ from matplotlib import pyplot as plt
 from datetime import datetime
 import os
 
+
+# switch to backend which does not need X server
 plt.switch_backend('agg')
-
-
-# .npy files to be analysed are read from a text file which is given as the first command line argument.
-# FILE SYNTAX:
-# PATH                  COMMA   NAME                    (  COMMA        COMMENT  )
-# /path/to/file.npy     ,       Name used in plots         ,            Comment that will not appear in the plot
-#
-# Empty lines and lines starting with # are ignored
 
 
 # get path to npy-list file and optionally overall-plot switch (which can be anything) from command line
@@ -101,12 +113,6 @@ if not do_overall_plot:
 
 print("done, %i loaded (%s)." % (len(predictions_list), ('overall' if do_overall_plot
                                                          else ('MHP' if is_mhp else 'regular'))))
-
-# if not server:
-#     tensorboard_dir = "/home/matthias/predictions"
-# else:
-#     predictions_filename = predictions_npy_name(model_name, epoch)
-# predictions = np.load(tensorboard_dir + "/" + predictions_filename)
 
 
 # # GROUND TRUTH
@@ -339,4 +345,3 @@ else:
 print("\nPlots stored at %s." % save_path)
 
 print("Done.")
-exit(0)

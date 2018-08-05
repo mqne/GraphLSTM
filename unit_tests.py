@@ -1,3 +1,6 @@
+# implements test routines for verifying that graph_lstm.py works as intended
+# run this file whenever changes to graph_lstm.py are made
+
 import graph_lstm as glstm
 import networkx as nx
 import tensorflow as tf

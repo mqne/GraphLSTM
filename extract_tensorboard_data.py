@@ -1,3 +1,5 @@
+# extracts data from TensorBoard 'events.out.tfevents.*' protocol files
+
 # adapted from GitHub user tomrunia
 # original file: tensorflow_log_loader.py at gist.github.com/tomrunia/1e1d383fb21841e8f144
 

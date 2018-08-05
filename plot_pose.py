@@ -1,3 +1,5 @@
+# plots qualitative plots of predicted and ground truth hand poses on top of corresponding depth maps
+
 import region_ensemble.model as re
 from helpers import *
 

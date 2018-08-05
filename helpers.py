@@ -1,3 +1,5 @@
+# useful functions and values for training the full DeepPrior+REN + Graph LSTM network
+
 from sys import stdout, argv
 from tqdm import tqdm
 import tensorflow as tf
@@ -42,7 +44,7 @@ def train_validate_split(train_validate_list, split=0.8):
     return train_validate_list[:cut], train_validate_list[cut:]
 
 
-def normalize_for_glstm(tensor):  # todo move to GraphLSTMNet?
+def normalize_for_glstm(tensor):  # not implemented in GraphLSTMNet, as it is a feature of the full network
     # tensor is normalized to range[-0.5, 0.5]
     # this function assumes tensors with shape [ batch_size, number_of_nodes, output_size=3 ]
     assert(len(tensor.shape) == 3)
