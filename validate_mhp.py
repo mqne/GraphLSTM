@@ -1,3 +1,7 @@
+print("\nvalidate_mhp.py is obsolete and superseded by validate.py, which handles both regular and mhp models.")
+exit(0)
+# todo delete this file
+
 import graph_lstm as glstm
 import region_ensemble.model as re
 import multiple_hypotheses_extension as mhp
@@ -30,9 +34,6 @@ dataset_root = r"/home/matthias-k/datasets/hands2017/data/hand2017_nor_img_new"
 train_and_validate_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)] + ["nor_00957032.pkl"]
 
 train_list, validate_list = train_validate_split(train_and_validate_list)
-
-testset_root = r"/data2/datasets/hands2017/data/hand2017_test_0914"
-test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.pkl"]
 
 # number of timesteps to be simulated (each step, the same data is fed)
 graphlstm_timesteps = 2
@@ -144,7 +145,7 @@ overall_mean_error = ErrorCalculator.overall_mean_error(individual_error)
 #         individual_error)
 
 print("\n# %s" % epoch_str)
-print("Mean mean prediction error (euclidean):", overall_mean_error)  # todo which unit is this in?
+print("Mean mean prediction error (euclidean):", overall_mean_error)
 
 pred_joint_avg = np.mean(predictions_mean, axis=0)
 actual_joint_avg = np.mean(validate_label, axis=0)
@@ -155,36 +156,3 @@ print("Predicted joints position average:\n%r" % pred_joint_avg)
 print("Validation done.")
 print("Point tensorboard to %s to get more insights. This directory also holds the .npy files for error analysis."
       % tensorboard_dir)
-exit(0)
-
-
-
-
-
-# # Validate
-
-validate_image_batch_gen = re.image_batch_generator(dataset_root, validate_list, re.Const.VALIDATE_BATCH_SIZE)
-
-predictions = region_ensemble_net.predict_generator(
-    validate_image_batch_gen,
-    steps=re.Const.NUM_VALIDATE_BATCHES, verbose=1
-)
-
-# mean absolute error
-validate_label_gen = re.sample_generator(dataset_root, "pose", validate_list)
-validate_label = np.asarray(list(validate_label_gen))
-print("average", np.abs(validate_label - predictions).mean())
-
-
-# # Explore Validate
-
-validate_model_image_gen = re.sample_generator(dataset_root, "image", train_list, resize_to_shape=re.Const.MODEL_IMAGE_SHAPE)
-validate_src_image_gen = re.sample_generator(dataset_root, "image", train_list)
-validate_label_gen = re.sample_generator(dataset_root, "pose", train_list)
-
-validate_model_image = next(validate_model_image_gen)
-validate_src_image = next(validate_src_image_gen)
-validate_label = next(validate_label_gen)
-validate_uvd = region_ensemble_net.predict(np.asarray([validate_model_image]))
-
-re.plot_scatter3d(validate_src_image, pred=validate_uvd, true=validate_label)
