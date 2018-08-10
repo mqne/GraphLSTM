@@ -1,6 +1,8 @@
 # Graph LSTM for Hand Pose Estimation
-![Hand Pose Estimation Example Image](https://github.com/mqne/GraphLSTM/raw/master/example_pair.png)
 This repository implements a Tensorflow library for hand pose estimation. The architecture of the refinement stage is based on the [2016 CVPR paper](https://arxiv.org/abs/1603.07063) by Liang et al.
+
+![Hand Pose Estimation Example Image](https://github.com/mqne/GraphLSTM/raw/master/example_pair.png)
+
 ## Getting started
 *Graph LSTM* extends the *Tensorflow* framework and is written in Python 3.
 
