@@ -104,8 +104,8 @@ if __name__ == '__main__':
     #                                       data_epochs=100, plot_start_epoch=80, plot_end_epoch=100,
     #                                       mm_per_unit=1)
     plot_helper.plot_histogram_continuous(glstm_hist, "Graph LSTM",
-                                          data_epochs=100, plot_start_epoch=35, plot_end_epoch=100,
+                                          data_epochs=100, plot_start_epoch=40, plot_end_epoch=100,
                                           xmin=-.3, xmax=.3, xticks=7,
-                                          figsize=(plot_helper.PAGEWIDTH_INCHES, 3), additional_mms_to_be_evaluated=[4.13618836461],
-                                          )  # savepath=model_name + "_glstm_hist")
+                                          figsize=(plot_helper.PAGEWIDTH_INCHES_BCOR3mm, 3), additional_mms_to_be_evaluated=[4.13618836461],
+                                          savepath=model_name + "_glstm_hist_BCOR3mm")
     print("Done.")

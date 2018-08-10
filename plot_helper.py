@@ -68,6 +68,7 @@ JointColours = {
 
 # pagewidth of text in thesis, obtained by LaTeX: \printinunitsof{in}\prntlen{\textwidth}
 PAGEWIDTH_INCHES = 5.78853
+PAGEWIDTH_INCHES_BCOR3mm = 5.70584
 
 
 def set_thesis_style():

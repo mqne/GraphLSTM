@@ -1,7 +1,8 @@
-# GraphLSTM for Hand Pose Estimation
-This repository implements a Tensorflow library for hand pose estimation. The network architecture is based on the [2016 CVPR paper](https://arxiv.org/abs/1603.07063) by Liang et al.
+# Graph LSTM for Hand Pose Estimation
+![Hand Pose Estimation Example Image](https://github.com/mqne/GraphLSTM/example_pair.png)
+This repository implements a Tensorflow library for hand pose estimation. The architecture of the refinement stage is based on the [2016 CVPR paper](https://arxiv.org/abs/1603.07063) by Liang et al.
 ## Getting started
-*GraphLSTM* extends the *Tensorflow* framework and is written in Python 3.
+*Graph LSTM* extends the *Tensorflow* framework and is written in Python 3.
 
  In order to run the provided test code or experiment with your own, a few requirements have to be met.
 ### Clone the Repository
@@ -15,7 +16,7 @@ and `cd` into it.
 ### Prerequisites
  - `tensorflow 1.8` or greater
  
-Apart from *[Tensorflow](https://www.tensorflow.org/install/)*, the following dependencies need to be fulfilled in order to get *GraphLSTM* up and running:
+Apart from *[Tensorflow](https://www.tensorflow.org/install/)*, the following dependencies need to be fulfilled in order to get *Graph LSTM* up and running:
 
  - `python 3.6` or greater
  - `networkx 2.0` or greater
@@ -24,7 +25,7 @@ You also need `numpy` which is automatically installed with Tensorflow.
 
 *This is enough to run the core package.* The following packages are required for additional functionality:
 
- - `matplotlib` for plotting the *GraphLSTM* graph,
+ - `matplotlib` for plotting the *Graph LSTM* graph and network evaluation plots,
  - `pandas` and
  - `scipy` for checks executed within the `networkx` library.
 

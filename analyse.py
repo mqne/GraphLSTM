@@ -316,7 +316,7 @@ elif is_mhp:
                                      model_name_list=npy_labels,
                                      # show_wrist_first=True,
                                      savepath=save_path + "joint_rank_plot",
-                                     figsize=(plot_helper.PAGEWIDTH_INCHES, 2.2)
+                                     figsize=(plot_helper.PAGEWIDTH_INCHES_BCOR3mm, 2.2)
                                      )
 
     for label, label_errors in zip(npy_labels, individual_hypotheses_errors_list):
