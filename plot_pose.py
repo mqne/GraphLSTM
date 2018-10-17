@@ -90,6 +90,7 @@ def plt_scatter2d(image=None, prediction=None, groundtruth=None,
     if filename is not None:
         bbox = Bbox(((0, 0), (figsize[0], figsize[1])))
         plt.savefig("/tmp/qualitative_hand_plots/%s.pdf" % filename, bbox_inches=bbox, dpi=300)
+        plt.savefig("/tmp/qualitative_hand_plots/%s.png" % filename, bbox_inches=bbox, dpi=300)
     # plt.show()
     plt.close()
 

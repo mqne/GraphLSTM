@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-# todo: change the copyright notice and license
+# This file provides an extension of TensorFlow towards Graph LSTM.
+# It is implemented by Matthias Kuehne and based on the 2016 CVPR paper
+# 'Semantic Object Parsing with Graph LSTM' by Liang et al., available at
+# https://arxiv.org/abs/1603.07063
 """Module implementing Graph LSTM.
 
 This module provides the Graph LSTM network, as well as the cell needed therefor.
