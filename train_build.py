@@ -20,7 +20,7 @@ checkpoint_dir = r"/home/matthias-k/GraphLSTM_data/%s" % prefix
 dataset_root = r"/mnt/nasbi/shared/research/hand-pose-estimation/hands2017/data/hand2017_nor_img_new"
 train_and_validate_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)] + ["nor_00957032.pkl"]
 
-train_list, validate_list = train_validate_split(train_and_validate_list, split=0.95)
+train_list, validate_list = train_validate_split(train_and_validate_list, split=1)
 
 # number of timesteps to be simulated (each step, the same data is fed)
 graphlstm_timesteps = 1

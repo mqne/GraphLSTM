@@ -8,6 +8,7 @@ import numpy as np
 import os
 
 import zipfile
+import tempfile
 from tqdm import tqdm
 
 
@@ -65,18 +66,22 @@ pose_submit_gen = ("frame\\images\\{}\t{}".format(name, '\t'.join(map(str, xyz))
 pose_submit_array = np.asarray(list(pose_submit_gen))
 
 name = npyname[:-4]
+# remove 'predictions_' prefix
+if name.startswith("predictions_"):
+    name = name[12:]
 
-zip_dir_name = '%s/%s' % (zip_dir, name)
+if not os.path.exists(zip_dir):
+    os.makedirs(zip_dir)
+    print("Created zipfile directory `%s`." % zip_dir)
 
-if not os.path.exists(zip_dir_name):
-    os.makedirs(zip_dir_name)
-    print("Created new zipfile directory `%s`." % zip_dir_name)
-
-print("Saving txt file …")
-np.savetxt('%s/result-newtest.txt' % zip_dir_name, pose_submit_array, delimiter='\n', fmt="%s")
+print("Creating result.txt file in memory …")
+temp_file = tempfile.SpooledTemporaryFile()
+np.savetxt(temp_file, pose_submit_array, delimiter='\n', fmt="%s")
+temp_file.seek(0)
 
 print("Saving zip file …")
-with zipfile.ZipFile("%s/result-newtest.zip" % zip_dir_name, 'w', zipfile.ZIP_DEFLATED) as zf:
-    zf.write("%s/result-newtest.txt" % zip_dir_name, "result.txt")
+with zipfile.ZipFile("%s/%s.zip" % (zip_dir, name), 'w', zipfile.ZIP_DEFLATED) as zf:
+    zf.writestr("result.txt", temp_file.read())
+temp_file.close()
 
 print("Done, exiting.")

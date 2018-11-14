@@ -51,14 +51,14 @@ do_overall_plot = do_overall_plot is not None
 
 # dataset path declarations
 
-groundtruth_npy_location = r"/home/matthias/validate_split0.8_groundtruth.npy"
+groundtruth_npy_location = r"/home/matthias/validate_split0.95_groundtruth.npy"
 
 # checkpoint_dir = r"/home/matthias-k/GraphLSTM_data/%s" % prefix
 
-dataset_root = r"/home/matthias-k/datasets/hands2017/data/hand2017_nor_img_new"
+dataset_root = r"/mnt/HDD_data/hands2017/data/hand2017_nor_img_new"
 train_and_validate_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)] + ["nor_00957032.pkl"]
 
-train_list, validate_list = train_validate_split(train_and_validate_list)
+train_list, validate_list = train_validate_split(train_and_validate_list, split=0.95)
 
 testset_root = r"/data2/datasets/hands2017/data/hand2017_test_0914"
 test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.pkl"]
