@@ -11,7 +11,7 @@ import os
 
 # pretrained model paths
 
-pretrained_prefix = "him2017-95"
+pretrained_prefix = "him2017-100"
 pretrained_model_name = "dpren"
 load_epoch = 30  # ADAPT HERE
 

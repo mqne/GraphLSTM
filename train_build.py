@@ -13,7 +13,7 @@ import os
 
 # dataset path declarations
 
-prefix = "him2017-95"
+prefix = "him2017-100"
 checkpoint_dir = r"/home/matthias-k/GraphLSTM_data/%s" % prefix
 
 # dataset_root = r"/home/matthias-k/datasets/hands2017/data/hand2017_nor_img_new"
