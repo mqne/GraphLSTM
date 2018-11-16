@@ -35,7 +35,7 @@ tensorboard_dir = checkpoint_dir + r"/tensorboard/test_him2017"
 
 # # PREPARE SESSION
 
-config = tf.ConfigProto(log_device_placement=True, allow_soft_placement=True)
+config = tf.ConfigProto(allow_soft_placement=True)
 config.gpu_options.allow_growth = True
 sess = tf.Session(config=config)
 K.set_session(sess)

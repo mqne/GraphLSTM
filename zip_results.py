@@ -28,6 +28,13 @@ npyname = predictions_npy_name(model_name, epoch)
 prediction_dir = r"/mnt/HDD_data/data/predictions/test_him2017"
 zip_dir = prediction_dir + "/zips"
 
+name = npyname[:-4]
+# remove 'predictions_' prefix
+if name.startswith("predictions_"):
+    name = name[12:]
+if prefix not in ("_", None):
+    name = prefix + "_" + name
+
 # load predictions
 print("Loading predictions …")
 predictions = np.load(prediction_dir + "/" + npyname)
@@ -62,13 +69,10 @@ def test_xyz_and_name_gen(predictions, testset_root, test_list):
 pose_submit_gen = ("frame\\images\\{}\t{}".format(name, '\t'.join(map(str, xyz)))
                    for xyz, name
                    in tqdm(test_xyz_and_name_gen(predictions, testset_root=testset_root, test_list=test_list),
-                           total=predictions.shape[0], desc="Gathering test image parameters"))
+                           total=predictions.shape[0], desc="Conversion to test image coordinates", leave=False,
+                           smoothing=0))
 pose_submit_array = np.asarray(list(pose_submit_gen))
-
-name = npyname[:-4]
-# remove 'predictions_' prefix
-if name.startswith("predictions_"):
-    name = name[12:]
+print("Conversion to test image coordinates done. Gathering results …")
 
 if not os.path.exists(zip_dir):
     os.makedirs(zip_dir)
@@ -82,6 +86,7 @@ temp_file.seek(0)
 print("Saving zip file …")
 with zipfile.ZipFile("%s/%s.zip" % (zip_dir, name), 'w', zipfile.ZIP_DEFLATED) as zf:
     zf.writestr("result.txt", temp_file.read())
+print("Created zip file %s.zip" % name)
 temp_file.close()
 
 print("Done, exiting.")
