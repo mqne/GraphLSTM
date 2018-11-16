@@ -18,7 +18,7 @@ load_epoch = 30  # ADAPT HERE
 
 # dataset path declarations
 
-prefix = "him2017-95"
+prefix = "him2017-100"
 checkpoint_dir = r"/home/matthias-k/GraphLSTM_data/%s" % prefix
 
 # checkpoint dir of the pretrained model
