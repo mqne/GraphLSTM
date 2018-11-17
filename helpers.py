@@ -251,5 +251,12 @@ class TQDMHelper:
         self._clear()
         self._write_raw(message)
 
-    def stop(self):
-        self.write(self._r_prefix)
+    def stop(self, tqdm_leave=False):
+        """Clears line containing additional info"""
+        if tqdm_leave:
+            self._write_raw(self._r_prefix)
+            self._clear()
+            print()
+        else:
+            self._clear()
+            self._write_raw(self._r_prefix)
