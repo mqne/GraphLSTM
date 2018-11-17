@@ -252,4 +252,4 @@ class TQDMHelper:
         self._write_raw(message)
 
     def stop(self):
-        self._clear()
+        self.write(self._r_prefix)
