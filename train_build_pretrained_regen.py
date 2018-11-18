@@ -96,7 +96,7 @@ graph_lstm_net = glstm.GraphLSTMNet(nxgraph, shared_weights=glstm.NEIGHBOUR_CONN
 # regen_output_tensor_reshaped = graph_lstm_net.reshape_input_for_dynamic_rnn(regen_output_tensor)
 
 # normalize RegEn net output
-regen_output_tensor_reshaped_normalized, undo_scaling = normalize_for_glstm(regen_output_tensor_reshaped)
+regen_output_tensor_reshaped_normalized, undo_scaling = glstm.normalize_for_graph_lstm(regen_output_tensor_reshaped)
 
 
 # input dimensions of GraphLSTMNet: batch_size, max_time, number_of_nodes, input_size

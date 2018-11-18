@@ -46,7 +46,7 @@ K.set_session(sess)
 
 print("\n###   Building Model: %s   ###\n" % model_name)
 
-print("Building RegionEnsemble network …")
+print("Building DP+REN network …")
 
 # initialize region_ensemble_net
 region_ensemble_net_pca = re.RegEnPCA(directory_prefix=prefix, use_precalculated_samples=False,

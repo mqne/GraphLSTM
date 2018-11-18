@@ -44,27 +44,28 @@ def train_validate_split(train_validate_list, split=0.8):
     return train_validate_list[:cut], train_validate_list[cut:]
 
 
-def normalize_for_glstm(tensor):  # not implemented in GraphLSTMNet, as it is a feature of the full network
-    # tensor is normalized to range[-0.5, 0.5]
-    # this function assumes tensors with shape [ batch_size, number_of_nodes, output_size=3 ]
-    assert(len(tensor.shape) == 3)
-    # compute maximum and minimum joint position value in each of x,y,z
-    max_dim = tf.reduce_max(tensor, axis=1, keepdims=True)
-    min_dim = tf.reduce_min(tensor, axis=1, keepdims=True)
-    diff_dim = tf.subtract(max_dim, min_dim)
-    # get normalizing factor as maximum difference within all 3 dimensions
-    max_diff = tf.reduce_max(diff_dim, axis=2, keepdims=True)
-    normalized_tensor = tf.divide(tensor - min_dim - diff_dim / 2, max_diff)
-
-    # return output rescaled and shifted to original position
-    def unnormalize(tensor):
-        return tf.multiply(tensor, max_diff) + diff_dim / 2 + min_dim
-
-    # return output only rescaled, centered around 0
-    def undo_scaling(tensor):
-        return tf.multiply(tensor, max_diff)
-
-    return normalized_tensor, undo_scaling
+# DEPRECATED (moved to graph_lstm.py as normalize_for_graph_lstm)
+# def normalize_for_glstm(tensor):  # not implemented in GraphLSTMNet, as it is a feature of the full network
+#     # tensor is normalized to range[-0.5, 0.5]
+#     # this function assumes tensors with shape [ batch_size, number_of_nodes, output_size=3 ]
+#     assert(len(tensor.shape) == 3)
+#     # compute maximum and minimum joint position value in each of x,y,z
+#     max_dim = tf.reduce_max(tensor, axis=1, keepdims=True)
+#     min_dim = tf.reduce_min(tensor, axis=1, keepdims=True)
+#     diff_dim = tf.subtract(max_dim, min_dim)
+#     # get normalizing factor as maximum difference within all 3 dimensions
+#     max_diff = tf.reduce_max(diff_dim, axis=2, keepdims=True)
+#     normalized_tensor = tf.divide(tensor - min_dim - diff_dim / 2, max_diff)
+#
+#     # return output rescaled and shifted to original position
+#     def unnormalize(tensor):
+#         return tf.multiply(tensor, max_diff) + diff_dim / 2 + min_dim
+#
+#     # return output only rescaled, centered around 0
+#     def undo_scaling(tensor):
+#         return tf.multiply(tensor, max_diff)
+#
+#     return normalized_tensor, undo_scaling
 
 
 # learning rate multiplier for tensorflow >= 1.8

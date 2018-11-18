@@ -33,7 +33,8 @@ from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import variable_scope as vs
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.util import nest
-from tensorflow import Tensor
+from tensorflow.python.ops.rnn import dynamic_rnn
+from tensorflow import Tensor, float32
 
 
 # identifiers for node attributes
@@ -89,6 +90,123 @@ _BIASES = {
 NONE_SHARED = set()
 ALL_SHARED = {*_WEIGHTS, *_UEIGHTS, *_NEIGHBOUR_UEIGHTS, *_BIASES}
 NEIGHBOUR_CONNECTIONS_SHARED = {*_NEIGHBOUR_UEIGHTS}
+
+
+def graph_lstm(inputs, nxgraph, num_units=None, state_is_tuple=True, shared_weights=ALL_SHARED, name=None,
+               timesteps=1, dtype=float32,
+               normalize=False, residual_connection=False):
+    """Functional interface for a Graph LSTM Network.
+    Returns the last time step of the output state.
+
+    Args:
+      inputs: Tensor input.
+      nxgraph: A networkx.Graph OR something a networkx.Graph can be built from.
+      num_units (int): Required if building the nxgraph inside the GraphLSTMNet.
+      state_is_tuple: If True, accepted and returned states are n-tuples, where
+        `n = len(cells)`.  If False, the states are all
+        concatenated along the column axis.  This latter behavior will soon be
+        deprecated.
+      shared_weights: A list of the weights that will be shared between all cells.
+        Default: ALL_SHARED.
+      name (string): The Tensorflow name of the Graph LSTM network. Must be given
+        if more than one is used.
+      timesteps (int): Number of timesteps to be simulated. Default: 1.
+      dtype: dtype used for Tensorflow calculations. Default: tf.float32
+      normalize: If True, automatically scales input into [-0.5,0.5] range
+        (and back afterwards). Default: False.
+      residual_connection: If True, a residual connection is added around the
+        GraphLSTMNet. Default: False.
+
+    Returns:
+      The Graph LSTM output Tensor shaped [batch size, num_nodes, num_units].
+
+    Raises:
+      ValueError: If nxgraph is not valid, or at least one of the cells
+        returns a state tuple but the flag `state_is_tuple` is `False`.
+    """
+
+    # build Graph LSTM Net
+
+    graph_lstm_net = GraphLSTMNet(nxgraph, num_units=num_units, state_is_tuple=state_is_tuple,
+                                  shared_weights=shared_weights, name=name)
+
+    # prepare input
+
+    # transform input into shape [ batch size, num_nodes, num_units ]
+    inputs = graph_lstm_net.reshape_input_for_dynamic_rnn(inputs)
+    # save input for residual connection
+    if residual_connection:
+        rescon_inputs = inputs
+    # normalize input
+    if normalize:
+        inputs, undo_scaling = normalize_for_graph_lstm(inputs)
+    # input dimensions of GraphLSTMNet: batch_size, max_time, number_of_nodes, input_size
+    # add time dimension
+    graphlstm_input_tensor = graph_lstm_net.reshape_input_for_dynamic_rnn(inputs,
+                                                                          timesteps=timesteps)
+
+    # wrap call to Graph LSTM into tf.dynamic_rnn
+
+    dynrnn_glstm_output_full, dynrnn_glstm_state = dynamic_rnn(graph_lstm_net,
+                                                               inputs=graphlstm_input_tensor,
+                                                               dtype=dtype)
+
+    # extract output
+
+    # reorder dimensions to [batch_size, max_time, number_of_nodes, output_size]
+    glstm_output_full = graph_lstm_net.transpose_output_from_cells_first_to_batch_first(dynrnn_glstm_output_full)
+    # extract last timestep from output
+    output = array_ops.unstack(glstm_output_full, axis=1)[-1]
+    # denormalize GraphLSTM output
+    if normalize:
+        output = undo_scaling(output)
+    # employ residual connection
+    if residual_connection:
+        output = math_ops.add(rescon_inputs, output)
+
+    return output
+
+
+def normalize_for_graph_lstm(tensor):
+    """Normalizes Tensor to range [-0.5, 0.5].
+
+    Scales a Tensor uniformly to fit within [-0.5, 0.5]^n. Additionally,
+      each dimension is shifted to be centred around [0]^n i.e. the origin,
+      in a way that data extends the same distance in positive and negative
+      direction. In other words, the mean between maximum and minimum value
+      of each dimension is shifted to zero. The undo_scaling op undoes
+      scaling, but does not undo shifting. The unnormalize op does both,
+      but is currently unused.
+
+    Returns: The normalized Tensor, and an op to undo normalization.
+
+    Example usage:
+    ```
+    normalized_tensor, undo_scaling = normalize_for_graph_lstm(input_tensor)
+    normalized_output_tensor = some_op(normalized_tensor)
+    output_tensor = undo_scaling(normalized_output_tensor)
+    ```
+    """
+    # tensor is normalized to range[-0.5, 0.5]
+    # this function assumes tensors with shape [ batch_size, number_of_nodes, output_size ]
+    assert(len(tensor.shape) == 3)
+    # compute maximum and minimum joint position value in each dimension
+    max_dim = math_ops.reduce_max(tensor, axis=1, keepdims=True)
+    min_dim = math_ops.reduce_min(tensor, axis=1, keepdims=True)
+    diff_dim = math_ops.subtract(max_dim, min_dim)
+    # get normalizing factor as maximum difference within all dimensions
+    max_diff = math_ops.reduce_max(diff_dim, axis=2, keepdims=True)
+    normalized_tensor = math_ops.divide(tensor - min_dim - diff_dim / 2, max_diff)
+
+    # return output rescaled and shifted to original position
+    def unnormalize(tensor):
+        return math_ops.multiply(tensor, max_diff) + diff_dim / 2 + min_dim
+
+    # return output only rescaled, centered around 0
+    def undo_scaling(tensor):
+        return math_ops.multiply(tensor, max_diff)
+
+    return normalized_tensor, undo_scaling
 
 
 class GraphLSTMCell(RNNCell):
