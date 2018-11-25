@@ -2,6 +2,7 @@
 
 import region_ensemble.model as re
 from helpers import *
+import dataset_loaders
 
 import tensorflow as tf
 import keras.backend as K
@@ -13,17 +14,8 @@ import os
 
 prefix, model_name, epoch = get_prefix_model_name_optionally_epoch()
 
-# dataset path declarations
 
 checkpoint_dir = r"/home/matthias-k/GraphLSTM_data/%s" % prefix
-
-# dataset_root = r"/home/matthias-k/datasets/hands2017/data/hand2017_nor_img_new"
-# train_and_validate_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)] + ["nor_00957032.pkl"]
-#
-# train_list, validate_list = train_validate_split(train_and_validate_list)
-
-testset_root = r"/mnt/nasbi/shared/research/hand-pose-estimation/hands2017/data/hand2017_test_0914"
-test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.pkl"]
 
 # number of timesteps to be simulated (each step, the same data is fed)
 graphlstm_timesteps = 2
@@ -31,6 +23,10 @@ learning_rate = 1e-3
 
 checkpoint_dir += r"/%s" % model_name
 tensorboard_dir = checkpoint_dir + r"/tensorboard/test_him2017"
+
+
+# load dataset
+HIM2017 = dataset_loaders.HIM2017Loader()
 
 
 # # PREPARE SESSION
@@ -82,8 +78,8 @@ with sess.as_default():
         raise ValueError("Expected 6 or 7 tensors in tf.get_collection(COLLECTION), but found %i:\n%r"
                          % (len(collection), collection))
 
-    test_image_batch_gen = re.image_batch_generator_one_epoch(testset_root,
-                                                              test_list,
+    test_image_batch_gen = re.image_batch_generator_one_epoch(HIM2017.test_root,
+                                                              HIM2017.test_list,
                                                               re.Const.TEST_BATCH_SIZE,
                                                               progress_desc="Collecting network output",
                                                               leave=True)
@@ -133,7 +129,7 @@ exit(0)
 print("Calculating errors …")
 
 # get ground truth labels
-validate_label_gen = re.sample_generator(dataset_root, "pose", validate_list)
+validate_label_gen = re.sample_generator(HIM2017.validate_root, "pose", HIM2017.validate_list)
 validate_label = np.asarray(list(validate_label_gen))
 # reshape from [set_size, 63] to [set_size, 21, 3]
 validate_label = np.reshape(validate_label, [-1, *output_shape[-2:]])

@@ -2,6 +2,7 @@
 
 from helpers import *
 import region_ensemble.model as re
+import dataset_loaders
 
 import numpy as np
 
@@ -12,8 +13,8 @@ import tempfile
 from tqdm import tqdm
 
 
-testset_root = r"/mnt/HDD_data/hands2017/data/hand2017_test_0914"
-test_list = ["%08d.pkl" % i for i in range(10000, 290001, 10000)] + ["00295510.pkl"]
+# load dataset
+HIM2017 = dataset_loaders.HIM2017Loader()
 
 
 # get path to npy file
@@ -28,6 +29,7 @@ npyname = predictions_npy_name(model_name, epoch)
 prediction_dir = r"/mnt/HDD_data/data/predictions/test_him2017"
 zip_dir = prediction_dir + "/zips"
 
+# remove '.npy' suffix
 name = npyname[:-4]
 # remove 'predictions_' prefix
 if name.startswith("predictions_"):
@@ -68,7 +70,8 @@ def test_xyz_and_name_gen(predictions, testset_root, test_list):
 
 pose_submit_gen = ("frame\\images\\{}\t{}".format(name, '\t'.join(map(str, xyz)))
                    for xyz, name
-                   in tqdm(test_xyz_and_name_gen(predictions, testset_root=testset_root, test_list=test_list),
+                   in tqdm(test_xyz_and_name_gen(predictions, testset_root=HIM2017.test_root,
+                                                 test_list=HIM2017.test_list),
                            total=predictions.shape[0], desc="Conversion to test image coordinates", leave=False,
                            smoothing=0))
 pose_submit_array = np.asarray(list(pose_submit_gen))

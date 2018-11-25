@@ -2,6 +2,7 @@
 
 import region_ensemble.model as re
 from helpers import *
+import dataset_loaders
 
 import numpy as np
 
@@ -11,16 +12,14 @@ from matplotlib.transforms import Bbox
 import plot_helper
 
 
-dataset_root = r"/mnt/HDD_data/hands2017/data/hand2017_nor_img_new"
-train_and_validate_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)] + ["nor_00957032.pkl"]
-
-train_list, validate_list = train_validate_split(train_and_validate_list)
-
-prediction_root = "/home/matthias/predictions"
 gt_location = "/home/matthias/validate_split0.8_groundtruth.npy"
 
 glstm_pred_name = "predictions_regen41_pretrained_epoch90_lrx0.1_graphlstm1bf1t2_rescon_adamlr0.001000_epoch90.npy"
 dpren_pred_name = "predictions_regen41_adamlr0.001000_epoch90.npy"
+prediction_root = "/home/matthias/predictions"
+
+# load dataset
+HIM2017 = dataset_loaders.HIM2017Loader(train_validate_split=.8)
 
 # load ground truth
 gt_npy = np.load(gt_location)
@@ -95,7 +94,7 @@ def plt_scatter2d(image=None, prediction=None, groundtruth=None,
     plt.close()
 
 
-src_image_gen = re.sample_generator(dataset_root, "image", validate_list)
+src_image_gen = re.sample_generator(HIM2017.validate_root, "image", HIM2017.validate_list)
 gt_gen = npy_generator(gt_npy)
 glstm_pr_gen = npy_generator(glstm_pr_npy)
 dpren_pr_gen = npy_generator(dpren_pr_npy)

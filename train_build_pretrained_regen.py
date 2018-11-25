@@ -3,6 +3,7 @@
 import graph_lstm as glstm
 import region_ensemble.model as re
 from helpers import *
+import dataset_loaders
 
 import tensorflow as tf
 import keras.backend as K
@@ -25,12 +26,6 @@ checkpoint_dir = r"/home/matthias-k/GraphLSTM_data/%s" % prefix
 pretrained_checkpoint_dir = r"/home/matthias-k/GraphLSTM_data/%s/%s" % \
                             (pretrained_prefix, pretrained_model_name)
 
-# dataset_root = r"/home/matthias-k/datasets/hands2017/data/hand2017_nor_img_new"
-dataset_root = r"/mnt/nasbi/shared/research/hand-pose-estimation/hands2017/data/hand2017_nor_img_new"
-train_and_validate_list = ["nor_%08d.pkl" % i for i in range(1000, 957001, 1000)] + ["nor_00957032.pkl"]
-
-train_list, validate_list = train_validate_split(train_and_validate_list, split=1)
-
 # number of timesteps to be simulated (each step, the same data is fed)
 graphlstm_timesteps = 1
 learning_rate = 1e-3
@@ -40,6 +35,10 @@ model_name = "dpren_e%i_glstm" % \
 
 checkpoint_dir += r"/%s" % model_name
 tensorboard_dir = checkpoint_dir + r"/tensorboard"
+
+
+# load dataset
+HIM2017 = dataset_loaders.HIM2017Loader(train_validate_split=1)
 
 
 # # PREPARE SESSION
@@ -183,7 +182,7 @@ with sess.as_default():
     for epoch in range(start_epoch, max_epoch + 1):
         t.start()
         # if augmentation should happen: pass augmented=True
-        training_sample_generator = re.pair_batch_generator_one_epoch(dataset_root, train_list,
+        training_sample_generator = re.pair_batch_generator_one_epoch(HIM2017.train_root, HIM2017.train_list,
                                                                       re.Const.TRAIN_BATCH_SIZE,
                                                                       shuffle=True, progress_desc="Epoch %i" % epoch,
                                                                       leave=False, epoch=epoch - 1,
