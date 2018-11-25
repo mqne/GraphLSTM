@@ -56,7 +56,15 @@ with sess.as_default():
     print("Restoring weights for epoch %i …" % load_epoch)
     loader.restore(sess, checkpoint_dir + "/%s-%i" % (model_name, load_epoch))
     print("Getting necessary tensors …")
-    input_tensor, output_tensor, groundtruth_tensor, train_step, loss, merged, is_training = tf.get_collection(COLLECTION)
+    collection = tf.get_collection(COLLECTION)
+    if len(collection) == 6:
+        input_tensor, output_tensor, groundtruth_tensor, train_step, loss, merged = collection
+        is_training = tf.placeholder(tf.bool)
+    elif len(collection) == 7:
+        input_tensor, output_tensor, groundtruth_tensor, train_step, loss, merged, is_training = collection
+    else:
+        raise ValueError("Expected 6 or 7 tensors in tf.get_collection(COLLECTION), but found %i:\n%r"
+                         % (len(collection), collection))
     print("Creating variable saver …")
     saver = tf.train.Saver(keep_checkpoint_every_n_hours=1, filename=checkpoint_dir)
     print("Creating training summary writer …")
